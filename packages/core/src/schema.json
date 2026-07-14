@@ -36,10 +36,9 @@
           {
             "if": { "properties": { "kind": { "const": "connector" } } },
             "then": {
-              "required": ["pins"],
+              "required": ["pins", "part"],
               "properties": {
-                "mpn": { "type": "string" },
-                "description": { "type": "string" },
+                "part": { "$ref": "#/definitions/part" },
                 "pins": {
                   "type": "array",
                   "minItems": 1,
@@ -65,9 +64,15 @@
                   "enum": ["ring", "spade", "ferrule", "tinned", "bare", "solder-cup", "pin"]
                 },
                 "stud": { "type": "string" },
-                "mpn": { "type": "string" },
-                "description": { "type": "string" }
+                "part": { "$ref": "#/definitions/part" }
               }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "terminal" } }, "required": ["kind"] },
+            "then": {
+              "if": { "properties": { "style": { "enum": ["ring", "spade", "ferrule", "solder-cup", "pin"] } } },
+              "then": { "required": ["part"] }
             }
           },
           {
@@ -75,7 +80,7 @@
             "then": {
               "properties": {
                 "method": { "enum": ["crimp", "solder", "ultrasonic"] },
-                "description": { "type": "string" }
+                "part": { "$ref": "#/definitions/part" }
               }
             }
           }
@@ -134,12 +139,12 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["description", "qty"],
+        "required": ["part", "qty"],
         "additionalProperties": false,
         "properties": {
-          "mpn": { "type": "string" },
-          "description": { "type": "string", "minLength": 1 },
-          "qty": { "type": ["number", "string"] }
+          "part": { "$ref": "#/definitions/part" },
+          "qty": { "type": ["number", "string"] },
+          "notes": { "type": "string" }
         }
       }
     },
@@ -150,12 +155,44 @@
       "properties": {
         "root": { "$ref": "#/definitions/id" }
       }
+    },
+    "parts": {
+      "type": "object",
+      "description": "Resolved distributor data keyed by \"vendor:number\". Maintained by `parts fetch` — do not hand-edit.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["vendor", "number", "mpn", "manufacturer", "description", "fetchedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "vendor": { "enum": ["lcsc", "mouser", "digikey"] },
+          "number": { "type": "string" },
+          "mpn": { "type": "string" },
+          "manufacturer": { "type": "string" },
+          "description": { "type": "string" },
+          "datasheetUrl": { "type": "string" },
+          "imageUrl": { "type": "string" },
+          "image": { "type": "string" },
+          "productUrl": { "type": "string" },
+          "priceUsd": { "type": "number" },
+          "stock": { "type": "number" },
+          "fetchedAt": { "type": "string" }
+        }
+      }
     }
   },
   "definitions": {
     "id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "part": {
+      "type": "object",
+      "required": ["vendor", "number"],
+      "additionalProperties": false,
+      "properties": {
+        "vendor": { "enum": ["lcsc", "mouser", "digikey"] },
+        "number": { "type": "string", "minLength": 1 }
+      }
     },
     "endpoint": {
       "type": "string",

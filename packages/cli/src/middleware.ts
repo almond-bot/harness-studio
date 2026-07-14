@@ -1,8 +1,19 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { collectPartRefs, partKey, type Harness, type PartsCache } from "@almond-harness-studio/core";
+import { loadConfig, resolvePart, type VendorConfig } from "./vendors.js";
 
 type Next = () => void;
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
 
 async function listHarnessFiles(dataDir: string): Promise<string[]> {
   const results: string[] = [];
@@ -81,6 +92,57 @@ export function createApiHandler(dataDir: string) {
       } catch {
         sendJson(res, 404, { error: `file not found: ${rel}` });
       }
+      return;
+    }
+
+    // Resolve part references server-side (distributor APIs don't allow browser CORS)
+    // and write the results back into the harness file.
+    if (url.pathname === "/api/parts/fetch" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}") as {
+        path?: string;
+        keys?: { mouser?: { apiKey?: string }; digikey?: { clientId?: string; clientSecret?: string } };
+      };
+      const rel = body.path ?? "";
+      const full = path.resolve(root, rel);
+      if (!full.startsWith(root + path.sep) && full !== root) {
+        sendJson(res, 400, { error: "invalid path" });
+        return;
+      }
+      let harness: Harness;
+      try {
+        harness = JSON.parse(await fs.readFile(full, "utf8")) as Harness;
+      } catch {
+        sendJson(res, 404, { error: `file not found: ${rel}` });
+        return;
+      }
+
+      const fileConfig = await loadConfig();
+      const config: VendorConfig = {
+        mouser: { apiKey: body.keys?.mouser?.apiKey || fileConfig.mouser?.apiKey },
+        digikey: {
+          clientId: body.keys?.digikey?.clientId || fileConfig.digikey?.clientId,
+          clientSecret: body.keys?.digikey?.clientSecret || fileConfig.digikey?.clientSecret,
+        },
+      };
+
+      const cache: PartsCache = { ...(harness.parts ?? {}) };
+      const failures: { part: string; error: string }[] = [];
+      let changed = false;
+      for (const ref of collectPartRefs(harness)) {
+        const key = partKey(ref);
+        if (cache[key]) continue;
+        try {
+          cache[key] = await resolvePart(ref, config);
+          changed = true;
+        } catch (err) {
+          failures.push({ part: key, error: (err as Error).message });
+        }
+      }
+      if (changed) {
+        harness.parts = cache;
+        await fs.writeFile(full, JSON.stringify(harness, null, 2) + "\n", "utf8");
+      }
+      sendJson(res, 200, { resolved: Object.keys(cache).length, failures });
       return;
     }
 

@@ -1,8 +1,9 @@
 import { Ajv, type ErrorObject } from "ajv";
 import schema from "./schema.json" with { type: "json" };
 import type { ConnectorNode, Harness } from "./types.js";
-import { parseEndpoint } from "./types.js";
+import { parseEndpoint, partKey } from "./types.js";
 import { checkTree, findSegmentPath } from "./graph.js";
+import { collectPartRefs, formatSource } from "./bom.js";
 
 export interface ValidationIssue {
   path: string;
@@ -188,6 +189,17 @@ export function validateHarness(data: unknown): ValidationResult {
     if (!wire.gauge) warnings.push({ path: `/wires/${i}`, message: `wire "${wire.id}" has no gauge` });
     if (!wire.color) warnings.push({ path: `/wires/${i}`, message: `wire "${wire.id}" has no color` });
   });
+
+  // Unresolved sourced parts (drawing renders with placeholders until fetched)
+  const cache = harness.parts ?? {};
+  for (const ref of collectPartRefs(harness)) {
+    if (!cache[partKey(ref)]) {
+      warnings.push({
+        path: "/parts",
+        message: `part ${formatSource(ref)} not resolved yet — run \`parts fetch\` to pull distributor data`,
+      });
+    }
+  }
 
   return { valid: errors.length === 0, errors, warnings, harness };
 }

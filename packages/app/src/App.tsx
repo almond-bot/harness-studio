@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { collectPartRefs, partKey } from "@almond-harness-studio/core";
 import { Preview } from "./Preview";
 import {
   fetchHarnessFile,
@@ -7,6 +8,7 @@ import {
   type LoadedHarness,
 } from "./useHarness";
 import { downloadPdf, downloadSvg, printSheet } from "./exportPdf";
+import { SettingsDialog, loadVendorKeys, type VendorKeys } from "./Settings";
 
 const canPickFiles = typeof window !== "undefined" && !!window.showOpenFilePicker;
 
@@ -16,7 +18,41 @@ export function App() {
   const [loaded, setLoaded] = useState<LoadedHarness | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [watchedHandle, setWatchedHandle] = useState<FileSystemFileHandle | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [keys, setKeys] = useState<VendorKeys>(() => loadVendorKeys());
+  const [fetchingParts, setFetchingParts] = useState(false);
+  const [partsError, setPartsError] = useState<string | null>(null);
   const lastModified = useRef(0);
+
+  const unresolvedParts = useMemo(() => {
+    const harness = loaded?.harness;
+    if (!harness) return 0;
+    const cache = harness.parts ?? {};
+    return collectPartRefs(harness).filter((ref) => !cache[partKey(ref)]).length;
+  }, [loaded]);
+
+  const fetchParts = useCallback(async () => {
+    if (!selected) return;
+    setFetchingParts(true);
+    setPartsError(null);
+    try {
+      const res = await fetch("/api/parts/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selected, keys }),
+      });
+      const body = (await res.json()) as { failures?: { part: string; error: string }[] };
+      if (body.failures?.length) {
+        setPartsError(body.failures.map((f) => `${f.part}: ${f.error}`).join("; "));
+      }
+      // File was rewritten with embedded parts; reload to re-render
+      setLoaded(await fetchHarnessFile(selected));
+    } catch (err) {
+      setPartsError((err as Error).message);
+    } finally {
+      setFetchingParts(false);
+    }
+  }, [selected, keys]);
 
   const openFile = useCallback(async (path: string) => {
     setWatchedHandle(null);
@@ -165,11 +201,18 @@ export function App() {
           </div>
         )}
         <div className="sidebar-footer">
+          <button className="link-button" onClick={() => setSettingsOpen(true)}>
+            API keys…
+          </button>
           <a href="https://github.com/almond-bot/harness-studio" target="_blank" rel="noreferrer">
             open source · MIT · Almond AI, Inc.
           </a>
         </div>
       </aside>
+
+      {settingsOpen && (
+        <SettingsDialog initial={keys} onSave={setKeys} onClose={() => setSettingsOpen(false)} />
+      )}
 
       <main className="main">
         {loaded && (
@@ -181,6 +224,11 @@ export function App() {
             </div>
             {loaded.svg && (
               <div className="actions">
+                {unresolvedParts > 0 && server.connected && selected && (
+                  <button className="fetch-parts" disabled={fetchingParts} onClick={() => void fetchParts()}>
+                    {fetchingParts ? "Fetching…" : `Fetch ${unresolvedParts} part${unresolvedParts > 1 ? "s" : ""}`}
+                  </button>
+                )}
                 <button
                   onClick={() =>
                     void downloadPdf(loaded.svg!, loaded.sheetWidth!, loaded.sheetHeight!, baseName)
@@ -197,6 +245,14 @@ export function App() {
           </header>
         )}
 
+        {partsError && (
+          <div className="issues errors">
+            <strong>part lookup failed</strong>
+            <ul>
+              <li>{partsError}</li>
+            </ul>
+          </div>
+        )}
         {loaded?.errors.length ? (
           <div className="issues errors">
             <strong>{loaded.errors.length} error(s)</strong>

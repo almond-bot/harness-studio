@@ -219,6 +219,24 @@ button {
 .sidebar-footer {
   padding: 12px 16px;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.link-button:hover {
+  color: var(--primary);
 }
 
 .sidebar-footer a {
@@ -313,6 +331,103 @@ button {
 
 .actions button:active {
   transform: translateY(1px);
+}
+
+/* Settings dialog */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.dialog {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dialog h2 {
+  margin: 0 0 6px;
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dialog-hint {
+  margin: 0 0 14px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dialog label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.dialog input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  box-sizing: border-box;
+}
+
+.dialog input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialog-actions button {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  transition: background 120ms ease;
+}
+
+.dialog-actions button:hover {
+  background: rgba(239, 244, 131, 0.85);
+}
+
+.dialog-actions button.secondary {
+  background: transparent;
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.dialog-actions button.secondary:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* Issues */

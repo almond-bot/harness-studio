@@ -1,5 +1,43 @@
 export type SheetSize = "ANSI B" | "Letter" | "A4" | "A3";
 
+export type PartVendor = "lcsc" | "mouser" | "digikey";
+
+/**
+ * Reference to a real, orderable component at a distributor. Components are
+ * always sourced — there are no free-form/generic components except wire and
+ * bulk coverings.
+ */
+export interface PartRef {
+  vendor: PartVendor;
+  /** Vendor part number: LCSC "C30170181", Mouser part # or MPN, Digi-Key part # */
+  number: string;
+}
+
+/** Distributor data for a PartRef, fetched by the CLI and cached on disk. */
+export interface ResolvedPart {
+  vendor: PartVendor;
+  number: string;
+  mpn: string;
+  manufacturer: string;
+  description: string;
+  datasheetUrl?: string;
+  imageUrl?: string;
+  /** Product photo as a data URI, embedded so drawings render offline */
+  image?: string;
+  productUrl?: string;
+  /** Unit price in USD at quantity 1 */
+  priceUsd?: number;
+  stock?: number;
+  fetchedAt: string;
+}
+
+/** Keyed by `${vendor}:${number}` */
+export type PartsCache = Record<string, ResolvedPart>;
+
+export function partKey(ref: PartRef): string {
+  return `${ref.vendor}:${ref.number}`;
+}
+
 export interface HarnessMeta {
   title: string;
   partNumber?: string;
@@ -23,8 +61,8 @@ export interface Position {
 export interface ConnectorNode {
   id: string;
   kind: "connector";
-  mpn?: string;
-  description?: string;
+  /** Sourced component (required — no generic connectors) */
+  part: PartRef;
   pins: Pin[];
   position?: Position;
 }
@@ -37,8 +75,11 @@ export interface TerminalNode {
   style: TerminalStyle;
   /** Stud size for ring/spade terminals, e.g. "M4" or "#10" */
   stud?: string;
-  mpn?: string;
-  description?: string;
+  /**
+   * Sourced component. Required for real parts (ring/spade/ferrule/pin/
+   * solder-cup); omitted only for wire preparations (tinned/bare ends).
+   */
+  part?: PartRef;
   position?: Position;
 }
 
@@ -48,7 +89,8 @@ export interface SpliceNode {
   id: string;
   kind: "splice";
   method?: SpliceMethod;
-  description?: string;
+  /** Optional sourced splice hardware (crimp band, butt splice, etc.) */
+  part?: PartRef;
   position?: Position;
 }
 
@@ -92,9 +134,10 @@ export interface WireGroup {
 }
 
 export interface Accessory {
-  mpn?: string;
-  description: string;
+  /** Sourced component (required — no generic accessories) */
+  part: PartRef;
   qty: number | string;
+  notes?: string;
 }
 
 export interface Harness {
@@ -110,6 +153,11 @@ export interface Harness {
     /** Node id placed at the left of the drawing; defaults to the first connector */
     root?: string;
   };
+  /**
+   * Resolved distributor data, maintained by `parts fetch` (never hand-written).
+   * Keeping it in the file makes drawings self-contained and offline-renderable.
+   */
+  parts?: PartsCache;
 }
 
 export interface EndpointRef {

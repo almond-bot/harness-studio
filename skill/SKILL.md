@@ -10,30 +10,48 @@ description: >-
 
 # almond-harness-studio
 
-Author a `*.harness.json` file, validate it, and export a vector-PDF drawing sheet the user can send to a harness manufacturer. Never draw harnesses by hand or with other tools; use this workflow.
+Author a `*.harness.json` file, validate it, fetch its parts from the distributor, and export a vector-PDF drawing sheet the user can send to a harness manufacturer. Never draw harnesses by hand or with other tools; use this workflow.
+
+Components are always real, orderable parts sourced from **LCSC**, **Mouser**, or **Digi-Key** — there are no free-form components (wire and bulk coverings are the only exceptions). Every connector, terminal, and accessory carries a `part` reference like `{ "vendor": "lcsc", "number": "C30170181" }`.
 
 ## Workflow
 
-1. Write the harness as `<name>.harness.json` (format below)
+1. Write the harness as `<name>.harness.json` (format below). Look up real distributor part numbers for every connector/terminal/accessory — search the vendor sites if the user didn't give you one, and confirm your picks with the user when uncertain.
 2. Validate and fix until clean:
 
 ```bash
 npx almond-harness-studio validate ./my-harness.harness.json
 ```
 
-3. Export the drawing:
+3. Fetch distributor data (description, MPN, photo, price, stock) into the file:
+
+```bash
+npx almond-harness-studio parts fetch ./my-harness.harness.json
+```
+
+LCSC needs no API key. Mouser and Digi-Key keys come from the user:
+
+```bash
+npx almond-harness-studio config set mouser.apiKey <key>
+npx almond-harness-studio config set digikey.clientId <id>
+npx almond-harness-studio config set digikey.clientSecret <secret>
+```
+
+(or env vars `MOUSER_API_KEY`, `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`)
+
+4. Export the drawing — resolved parts render with product photos and a sourced BOM:
 
 ```bash
 npx almond-harness-studio export ./my-harness.harness.json -o ./my-harness.pdf
 ```
 
-4. For a live preview the user can watch while you iterate:
+5. For a live preview the user can watch while you iterate:
 
 ```bash
 npx almond-harness-studio dev ./harnesses-folder
 ```
 
-Validation errors include the JSON path and an actionable message. Do not hand the user a PDF until validation passes with no errors.
+Validation errors include the JSON path and an actionable message. Unresolved parts are reported as warnings until `parts fetch` runs. Do not hand the user a PDF until validation passes with no errors and all parts are fetched.
 
 ## Data model
 
@@ -43,10 +61,10 @@ A harness is a tree: **nodes** (connectors, terminals, splices, breakout points)
 {
   "meta": { "title": "MAIN BATTERY HARNESS", "partNumber": "PN-001", "rev": "A", "date": "2026-07-13", "sheet": "ANSI B" },
   "nodes": [
-    { "id": "J1", "kind": "connector", "mpn": "XT30(2+2)-F.G.B", "description": "XT30(2+2) female",
+    { "id": "J1", "kind": "connector", "part": { "vendor": "lcsc", "number": "C30170181" },
       "pins": [{ "id": "1", "label": "BAT+" }, { "id": "2", "label": "BAT-" }] },
     { "id": "B1", "kind": "breakout" },
-    { "id": "T1", "kind": "terminal", "style": "ring", "stud": "M4" },
+    { "id": "T1", "kind": "terminal", "style": "ring", "stud": "M5", "part": { "vendor": "lcsc", "number": "C717313" } },
     { "id": "SP1", "kind": "splice", "method": "crimp" }
   ],
   "segments": [
@@ -57,24 +75,27 @@ A harness is a tree: **nodes** (connectors, terminals, splices, breakout points)
     { "id": "W1", "from": "J1.1", "to": "T1", "gauge": "16 AWG", "color": "red" }
   ],
   "wireGroups": [{ "id": "TW1", "wires": ["W3", "W4"], "twisted": true }],
-  "accessories": [{ "description": "Heatshrink, dual wall, 6 mm", "qty": "40 mm" }],
+  "accessories": [{ "part": { "vendor": "lcsc", "number": "C2837172" }, "qty": "40 mm" }],
   "notes": ["CRIMP TERMINATIONS PER IPC/WHMA-A-620."]
 }
 ```
 
 Key rules:
 
+- Every connector requires a `part` (`vendor` + `number`). Real terminals (ring/spade/ferrule/solder-cup/pin) require one too; `tinned`/`bare` are wire preparations and take none.
+- Part vendors: `lcsc` (part # like `C30170181`), `mouser` (Mouser # or MPN), `digikey` (Digi-Key # or MPN)
 - Wire endpoints on connectors are `"J1.1"` (node.pin); on terminals/splices just `"T1"`
 - Terminal styles: `ring` (set `stud`), `spade`, `ferrule`, `tinned`, `bare`, `solder-cup`, `pin`
 - Coverings: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none`
 - Wire colors: standard names, stripes as `"red/white"`
 - Sheets: `ANSI B` (default), `Letter`, `A3`, `A4`
 - The BOM and wire list are derived automatically — don't add wire or connector rows to `accessories`
+- Never hand-write the top-level `parts` object — `parts fetch` maintains it
 
 ## Authoring guidance
 
 - Ask the user (or infer from context): connector part numbers, wire gauge, lengths, and what each end terminates into. State assumptions in `notes`.
-- Include MPNs whenever known; manufacturers quote from the BOM.
+- Prefer LCSC part numbers when the user has no vendor preference — lookups need no API key.
 - Put manufacturing requirements in `notes` in uppercase (tolerance, workmanship spec, twist lay, label requirements).
 - Use `wireGroups` with `twisted: true` for differential/CAN/I2C pairs.
 - For full field-by-field documentation, see [reference.md](reference.md). For complete worked examples, see [examples/](examples/).

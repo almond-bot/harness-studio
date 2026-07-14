@@ -1,12 +1,16 @@
-import type { Harness, TerminalNode } from "./types.js";
+import type { Harness, PartRef, PartsCache, TerminalNode } from "./types.js";
+import { partKey } from "./types.js";
 import { parseWireColor } from "./colors.js";
 import { resolveRoute } from "./layout.js";
 
 export interface BomRow {
   item: number;
   qty: string;
+  /** Manufacturer part number (from the distributor record) */
   mpn: string;
   description: string;
+  /** e.g. "LCSC C30170181" — empty for wire/coverings */
+  source: string;
 }
 
 export interface WireListRow {
@@ -19,19 +23,25 @@ export interface WireListRow {
   notes: string;
 }
 
-function terminalDescription(node: TerminalNode): string {
-  const styles: Record<TerminalNode["style"], string> = {
-    ring: "RING TERMINAL",
-    spade: "SPADE TERMINAL",
-    ferrule: "FERRULE",
-    tinned: "TINNED LEAD",
-    bare: "BARE WIRE",
-    "solder-cup": "SOLDER CUP",
-    pin: "PIN TERMINAL",
-  };
-  const base = node.description ?? styles[node.style];
-  return node.stud ? `${base}, ${node.stud} STUD` : base;
+const VENDOR_NAMES: Record<string, string> = {
+  lcsc: "LCSC",
+  mouser: "MOUSER",
+  digikey: "DIGI-KEY",
+};
+
+export function formatSource(ref: PartRef): string {
+  return `${VENDOR_NAMES[ref.vendor] ?? ref.vendor.toUpperCase()} ${ref.number}`;
 }
+
+const TERMINAL_STYLE_NAMES: Record<TerminalNode["style"], string> = {
+  ring: "RING TERMINAL",
+  spade: "SPADE TERMINAL",
+  ferrule: "FERRULE",
+  tinned: "TINNED LEAD",
+  bare: "BARE WIRE",
+  "solder-cup": "SOLDER CUP",
+  pin: "PIN TERMINAL",
+};
 
 export function wireLengthMm(harness: Harness, wireId: string): number {
   const segById = new Map(harness.segments.map((s) => [s.id, s]));
@@ -64,31 +74,61 @@ const COVERING_NAMES: Record<string, string> = {
   "spiral-wrap": "SPIRAL WRAP",
 };
 
-export function buildBom(harness: Harness): BomRow[] {
+/** Every sourced part referenced by the harness, in stable order. */
+export function collectPartRefs(harness: Harness): PartRef[] {
+  const refs: PartRef[] = [];
+  const seen = new Set<string>();
+  const add = (ref?: PartRef) => {
+    if (!ref) return;
+    const key = partKey(ref);
+    if (seen.has(key)) return;
+    seen.add(key);
+    refs.push(ref);
+  };
+  for (const node of harness.nodes) {
+    if (node.kind === "connector") add(node.part);
+    else if (node.kind === "terminal" || node.kind === "splice") add(node.part);
+  }
+  for (const acc of harness.accessories ?? []) add(acc.part);
+  return refs;
+}
+
+export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
   const rows: Omit<BomRow, "item">[] = [];
 
-  // Connectors and terminals grouped by part
-  const partCounts = new Map<string, { qty: number; mpn: string; description: string }>();
-  const addPart = (key: string, mpn: string, description: string) => {
+  const describe = (ref: PartRef, fallback: string): { mpn: string; description: string } => {
+    const resolved = parts[partKey(ref)];
+    if (!resolved) return { mpn: ref.number, description: fallback };
+    return {
+      mpn: resolved.mpn || ref.number,
+      description: (resolved.description || fallback).toUpperCase(),
+    };
+  };
+
+  // Sourced parts grouped by vendor part, counted per use
+  const partCounts = new Map<string, { qty: number; ref: PartRef; fallback: string }>();
+  const addPart = (ref: PartRef, fallback: string) => {
+    const key = partKey(ref);
     const existing = partCounts.get(key);
     if (existing) existing.qty += 1;
-    else partCounts.set(key, { qty: 1, mpn, description });
+    else partCounts.set(key, { qty: 1, ref, fallback });
   };
 
   for (const node of harness.nodes) {
     if (node.kind === "connector") {
-      const desc = node.description ?? `CONNECTOR, ${node.pins.length} POS`;
-      addPart(`connector:${node.mpn ?? desc}`, node.mpn ?? "—", desc.toUpperCase());
+      addPart(node.part, `CONNECTOR, ${node.pins.length} POS`);
     } else if (node.kind === "terminal") {
-      const desc = terminalDescription(node);
-      addPart(`terminal:${node.mpn ?? desc}`, node.mpn ?? "—", desc.toUpperCase());
-    } else if (node.kind === "splice") {
-      const desc = node.description ?? `SPLICE${node.method ? `, ${node.method.toUpperCase()}` : ""}`;
-      addPart(`splice:${desc}`, "—", desc.toUpperCase());
+      const fallback = node.stud
+        ? `${TERMINAL_STYLE_NAMES[node.style]}, ${node.stud} STUD`
+        : TERMINAL_STYLE_NAMES[node.style];
+      if (node.part) addPart(node.part, fallback);
+    } else if (node.kind === "splice" && node.part) {
+      addPart(node.part, `SPLICE${node.method ? `, ${node.method.toUpperCase()}` : ""}`);
     }
   }
-  for (const part of partCounts.values()) {
-    rows.push({ qty: String(part.qty), mpn: part.mpn, description: part.description });
+  for (const { qty, ref, fallback } of partCounts.values()) {
+    const { mpn, description } = describe(ref, fallback);
+    rows.push({ qty: String(qty), mpn, description, source: formatSource(ref) });
   }
 
   // Wire grouped by gauge + color, quantity = total length
@@ -106,6 +146,7 @@ export function buildBom(harness: Harness): BomRow[] {
       qty: `${total.lengthMm} mm`,
       mpn: "—",
       description: `WIRE, ${total.gauge}, ${total.color}`.toUpperCase(),
+      source: "",
     });
   }
 
@@ -117,11 +158,22 @@ export function buildBom(harness: Harness): BomRow[] {
     }
   }
   for (const [covering, lengthMm] of coverTotals) {
-    rows.push({ qty: `${lengthMm} mm`, mpn: "—", description: COVERING_NAMES[covering] ?? covering.toUpperCase() });
+    rows.push({
+      qty: `${lengthMm} mm`,
+      mpn: "—",
+      description: COVERING_NAMES[covering] ?? covering.toUpperCase(),
+      source: "",
+    });
   }
 
   for (const acc of harness.accessories ?? []) {
-    rows.push({ qty: String(acc.qty), mpn: acc.mpn ?? "—", description: acc.description.toUpperCase() });
+    const { mpn, description } = describe(acc.part, "ACCESSORY");
+    rows.push({
+      qty: String(acc.qty),
+      mpn,
+      description: acc.notes ? `${description} — ${acc.notes.toUpperCase()}` : description,
+      source: formatSource(acc.part),
+    });
   }
 
   return rows.map((row, i) => ({ item: i + 1, ...row }));

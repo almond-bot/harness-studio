@@ -11,9 +11,23 @@ Complete field documentation for `*.harness.json` files. The machine-readable sc
 | `segments` | yes | Bundle runs between nodes (the harness tree) |
 | `wires` | yes | Conductors, routed through segments |
 | `wireGroups` | no | Twisted pairs/triples |
-| `accessories` | no | Extra BOM lines (heatshrink pieces, labels, ties) |
+| `accessories` | no | Extra sourced BOM lines (heatshrink pieces, labels, ties) |
 | `notes` | no | Numbered manufacturing notes on the sheet |
 | `layout` | no | `{ "root": "J1" }` — node placed at the drawing's left |
+| `parts` | no | Resolved distributor data, written by `parts fetch` — never hand-edit |
+
+## Sourced parts
+
+Components are always real, orderable parts. Everywhere a `part` appears it is:
+
+```json
+{ "vendor": "lcsc", "number": "C30170181" }
+```
+
+- `vendor`: `lcsc`, `mouser`, or `digikey`
+- `number`: LCSC part # (`C…`), Mouser part # or MPN, Digi-Key part # or MPN
+
+`parts fetch` resolves each reference against the distributor API and embeds the result (MPN, manufacturer, description, datasheet, product photo, unit price, stock) under the top-level `parts` object, keyed `"vendor:number"`. The renderer then shows the product photo next to the node and fills the BOM's PART NUMBER/DESCRIPTION/SOURCE columns from distributor data. Files with embedded parts render fully offline.
 
 ## meta
 
@@ -29,19 +43,19 @@ All nodes: `id` (unique, `[A-Za-z0-9_-]+`), `kind`, optional `position` `{x, y}`
 
 ### connector
 
+- `part` (required): sourced component, e.g. `{ "vendor": "lcsc", "number": "C30170181" }`
 - `pins` (required): array of `{ "id": "1", "label": "BAT+" }`. Pin ids are strings — `"S1"`, `"A"` are fine.
-- `mpn`: manufacturer part number — include whenever known, it feeds the BOM
-- `description`: e.g. `"XT30(2+2) female, power + signal"`
 
 ### terminal
 
 - `style` (required): `ring`, `spade`, `ferrule`, `tinned`, `bare`, `solder-cup`, `pin`
 - `stud`: for ring/spade, e.g. `"M4"` or `"#10"`
-- `mpn`, `description`: optional BOM enrichment
+- `part`: required for real parts (`ring`, `spade`, `ferrule`, `solder-cup`, `pin`); omitted for wire preparations (`tinned`, `bare`)
 
 ### splice
 
 - `method`: `crimp`, `solder`, `ultrasonic`
+- `part`: optional sourced splice hardware (butt splice, crimp band)
 - Wires ending at a splice reference it without a pin: `"to": "SP1"`
 
 ### breakout
@@ -73,18 +87,24 @@ Twisted groups render a twist symbol on the shared segment and add `TWISTED (TW1
 
 ## accessories
 
-Extra BOM rows: `{ "mpn": "...", "description": "Heatshrink, dual wall, 6 mm", "qty": "40 mm" }`. `qty` may be a number or string. Do not duplicate connectors/wire/coverings here — those BOM rows are derived.
+Extra sourced BOM rows: `{ "part": { "vendor": "lcsc", "number": "C2837172" }, "qty": "40 mm", "notes": "over branch B1-J2" }`. `qty` may be a number or string. Do not duplicate connectors/wire/coverings here — those BOM rows are derived.
 
 ## Derived outputs (do not author)
 
-- **BOM**: connectors and terminals grouped by MPN, wire totals by gauge+color, covering totals by type, then accessories
+- **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color, covering totals by type, then accessories
 - **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), twist notes
 - **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left
+- **`parts`**: distributor data embedded by `parts fetch`; product photos render on the drawing
 
 ## CLI
 
 ```bash
-npx almond-harness-studio validate <files...>   # schema + referential checks; exit 1 on error
+npx almond-harness-studio validate <files...>       # schema + referential checks; exit 1 on error
+npx almond-harness-studio parts fetch <files...>    # resolve part refs against LCSC/Mouser/Digi-Key, embed in file
+npx almond-harness-studio config set <key> <value>  # mouser.apiKey | digikey.clientId | digikey.clientSecret
+npx almond-harness-studio config list               # show configured keys (masked)
 npx almond-harness-studio export <file> [-o out.pdf] [--svg]
-npx almond-harness-studio dev [dir] [-p port]   # live-preview viewer (default command)
+npx almond-harness-studio dev [dir] [-p port]       # live-preview viewer (default command)
 ```
+
+API keys: LCSC lookups need no key. Mouser needs a Search API key (mouser.com/api-hub). Digi-Key needs a Product Information v4 app's client ID/secret (developer.digikey.com). Keys load from `~/.config/almond-harness-studio/config.json` or env vars `MOUSER_API_KEY`, `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`.

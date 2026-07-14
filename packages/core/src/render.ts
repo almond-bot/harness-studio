@@ -1,4 +1,5 @@
-import type { Harness, HarnessNode, SheetSize, TerminalNode } from "./types.js";
+import type { Harness, PartsCache, ResolvedPart, SheetSize, TerminalNode } from "./types.js";
+import { partKey } from "./types.js";
 import { layoutHarness, CONNECTOR_HEADER, PIN_ROW, type LayoutResult, type NodeBox, type Point } from "./layout.js";
 import { parseWireColor } from "./colors.js";
 import { buildBom, buildWireList } from "./bom.js";
@@ -34,6 +35,13 @@ interface TextOpts {
 function text(x: number, y: number, str: string, opts: TextOpts = {}): string {
   const { size = 10, weight = "normal", anchor = "start", fill = "#111" } = opts;
   return `<text x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" fill="${fill}">${esc(str)}</text>`;
+}
+
+/** Truncate to fit a column so table cells never spill into their neighbors. */
+function fitText(value: string, widthPx: number, fontSize: number): string {
+  const maxChars = Math.floor((widthPx - 10) / (fontSize * 0.56));
+  if (value.length <= maxChars) return value;
+  return value.slice(0, Math.max(1, maxChars - 1)).trimEnd() + "…";
 }
 
 interface Column {
@@ -84,7 +92,7 @@ function renderTable(x: number, y: number, columns: Column[], rows: string[][], 
     }
     let cellX = x;
     columns.forEach((col, c) => {
-      const value = row[c] ?? "";
+      const value = fitText(row[c] ?? "", col.width, 8.5);
       const alignX =
         col.align === "end" ? cellX + col.width - 5 : col.align === "middle" ? cellX + col.width / 2 : cellX + 5;
       parts.push(text(alignX, ry + 11.5, value, { size: 8.5, anchor: col.align ?? "start" }));
@@ -107,7 +115,7 @@ function terminalShortDesc(node: TerminalNode): string {
   return node.stud ? `${names[node.style]} ${node.stud}` : names[node.style];
 }
 
-function renderTerminalSymbol(box: NodeBox): string {
+function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
   const node = box.node as TerminalNode;
   // Symbol sits exactly on the box centerline so it meets the incoming wire
   const cy = box.y + box.height / 2;
@@ -163,14 +171,45 @@ function renderTerminalSymbol(box: NodeBox): string {
       break;
   }
   const labelX = box.x + box.width / 2;
-  parts.push(text(labelX, box.y + box.height + 6, `${node.id} · ${terminalShortDesc(node)}`, { size: 9, weight: "bold", anchor: "middle" }));
+  const desc = resolved?.mpn ? `${terminalShortDesc(node)} · ${resolved.mpn}` : terminalShortDesc(node);
+  parts.push(text(labelX, box.y + box.height + 6, `${node.id} · ${desc}`, { size: 9, weight: "bold", anchor: "middle" }));
   return parts.join("\n");
 }
 
-function renderNode(box: NodeBox): string {
+function resolvedFor(node: { part?: { vendor: string; number: string } }, parts: PartsCache): ResolvedPart | undefined {
+  if (!node.part) return undefined;
+  return parts[partKey(node.part as Parameters<typeof partKey>[0])];
+}
+
+/**
+ * Part photo rendered next to the node symbol, like pictorial views on
+ * manufacturing drawings. Root-side nodes get the photo above the box; leaf
+ * nodes get it on the outward side so it stays clear of incoming wires.
+ */
+function renderPartPhoto(box: NodeBox, resolved: ResolvedPart | undefined): string {
+  if (!resolved?.image) return "";
+  const size = 64;
+  let x: number;
+  let y: number;
+  if (box.facesRight) {
+    x = box.x + (box.width - size) / 2;
+    y = box.y - size - 14;
+  } else {
+    x = box.x + box.width + 12;
+    y = box.y + box.height / 2 - size / 2;
+  }
+  return (
+    `<image x="${fmt(x)}" y="${fmt(y)}" width="${size}" height="${size}" href="${resolved.image}" preserveAspectRatio="xMidYMid meet"/>` +
+    `<rect x="${fmt(x)}" y="${fmt(y)}" width="${size}" height="${size}" fill="none" stroke="#ccc" stroke-width="0.75"/>`
+  );
+}
+
+function renderNode(box: NodeBox, partsCache: PartsCache): string {
   const node = box.node;
   const parts: string[] = [];
   if (node.kind === "connector") {
+    const resolved = resolvedFor(node, partsCache);
+    parts.push(renderPartPhoto(box, resolved));
     parts.push(
       `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="white" stroke="#111" stroke-width="1.5"/>`
     );
@@ -178,7 +217,7 @@ function renderNode(box: NodeBox): string {
       `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${CONNECTOR_HEADER}" fill="#f0f0f0" stroke="#111" stroke-width="1.5"/>`
     );
     parts.push(text(box.x + 6, box.y + 14, node.id, { size: 11, weight: "bold" }));
-    const sub = node.mpn ?? node.description ?? `${node.pins.length} POS`;
+    const sub = resolved?.mpn ?? `${node.part.vendor.toUpperCase()} ${node.part.number}`;
     parts.push(text(box.x + 6, box.y + 27, sub, { size: 8, fill: "#333" }));
 
     const pinCellW = 24;
@@ -200,7 +239,9 @@ function renderNode(box: NodeBox): string {
       }
     });
   } else if (node.kind === "terminal") {
-    parts.push(renderTerminalSymbol(box));
+    const resolved = resolvedFor(node, partsCache);
+    parts.push(renderPartPhoto(box, resolved));
+    parts.push(renderTerminalSymbol(box, resolved));
   } else if (node.kind === "splice") {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
@@ -376,8 +417,9 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   const margin = 18;
   const frame = { x: margin, y: margin, w: W - margin * 2, h: H - margin * 2 };
 
+  const partsCache = harness.parts ?? {};
   const layout = layoutHarness(harness);
-  const bom = buildBom(harness);
+  const bom = buildBom(harness, partsCache);
   const wireList = buildWireList(harness);
 
   const parts: string[] = [];
@@ -404,9 +446,10 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   // BOM: top-right
   const bomCols: Column[] = [
     { title: "ITEM", width: 34, align: "middle" },
-    { title: "QTY", width: 64, align: "middle" },
-    { title: "PART NUMBER", width: 140 },
+    { title: "QTY", width: 56, align: "middle" },
+    { title: "PART NUMBER", width: 130 },
     { title: "DESCRIPTION", width: 190 },
+    { title: "SOURCE", width: 118 },
   ];
   const bomW = bomCols.reduce((s, c) => s + c.width, 0);
   const bomX = frame.x + frame.w - bomW - 10;
@@ -416,7 +459,7 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
       bomX,
       bomY,
       bomCols,
-      bom.map((r) => [String(r.item), r.qty, r.mpn, r.description]),
+      bom.map((r) => [String(r.item), r.qty, r.mpn, r.description, r.source]),
       "BILL OF MATERIALS"
     )
   );
@@ -466,7 +509,16 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   // Drawing area: center on the sheet (above the bottom band); if the drawing
   // would collide with the BOM in the top-right, fall back to the region left of it.
   const bottomBand = Math.max(wlH, tbH) + 24;
-  const b = layout.bounds;
+  const b = { ...layout.bounds };
+  // Part photos render above root-side nodes and beside leaf nodes; reserve room
+  const hasPhotos = harness.nodes.some(
+    (n) => "part" in n && n.part && partsCache[partKey(n.part)]?.image
+  );
+  if (hasPhotos) {
+    b.y -= 80;
+    b.height += 80;
+    b.width += 80;
+  }
   const pad = 30;
   const availY = frame.y + 20;
   const availH = frame.h - bottomBand - 40;
@@ -488,7 +540,7 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   parts.push(renderSegments(layout));
   parts.push(renderWires(harness, layout));
   parts.push(renderTwistMarks(harness, layout));
-  for (const box of layout.boxes.values()) parts.push(renderNode(box));
+  for (const box of layout.boxes.values()) parts.push(renderNode(box, partsCache));
   parts.push(`</g>`);
 
   parts.push(

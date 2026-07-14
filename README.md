@@ -4,7 +4,8 @@ Wire harness drawings from JSON. Design harnesses as `*.harness.json` files (by 
 
 - **Local-first**: your harness data stays in your own folders and repos. No accounts, no uploads, no backend.
 - **Agent-first**: a JSON schema, a validating CLI with precise errors, and headless PDF export give coding agents a complete author → validate → export loop. A ready-made skill ships in [`skill/`](skill/SKILL.md).
-- **Manufacturer-ready**: single-sheet drawings (ANSI B, Letter, A3, A4) with pin tables, branch points, twisted-pair marks, covering callouts, segment lengths, BOM, wire list, and notes.
+- **Real parts only**: components are sourced from LCSC, Mouser, or Digi-Key by part number. `parts fetch` pulls the distributor record (MPN, description, photo, price, stock) into the file, so drawings show real product photos and a sourced BOM.
+- **Manufacturer-ready**: single-sheet drawings (ANSI B, Letter, A3, A4) with pin tables, part photos, branch points, twisted-pair marks, covering callouts, segment lengths, BOM with distributor part numbers, wire list, and notes.
 
 ## Quickstart
 
@@ -17,6 +18,9 @@ node packages/cli/dist/index.js dev ./examples
 # validate
 node packages/cli/dist/index.js validate examples/*.harness.json
 
+# pull distributor data (MPN, photo, price) for every referenced part
+node packages/cli/dist/index.js parts fetch examples/branched-battery-pigtail.harness.json
+
 # headless vector PDF export (no browser needed)
 node packages/cli/dist/index.js export examples/branched-battery-pigtail.harness.json -o harness.pdf
 ```
@@ -27,13 +31,15 @@ Once published to npm, the same commands run as `npx almond-harness-studio <cmd>
 
 A harness is a tree of **nodes** (connectors, terminals, splices, breakouts) joined by **segments** (bundle runs with a length and optional covering). **Wires** run pin-to-pin through segments; routing, wire lengths, the BOM, and the wire list are all derived.
 
+Components are always real, orderable parts referenced by distributor part number — LCSC (`lcsc`), Mouser (`mouser`), or Digi-Key (`digikey`). Wire and bulk coverings are the only generic materials.
+
 ```json
 {
   "meta": { "title": "BATTERY POWER HARNESS", "partNumber": "PN-0001", "rev": "A", "sheet": "ANSI B" },
   "nodes": [
-    { "id": "J1", "kind": "connector", "mpn": "XT30(2+2)-F.G.B",
+    { "id": "J1", "kind": "connector", "part": { "vendor": "lcsc", "number": "C30170181" },
       "pins": [{ "id": "1", "label": "BAT+" }, { "id": "2", "label": "BAT-" }] },
-    { "id": "T1", "kind": "terminal", "style": "ring", "stud": "M4" }
+    { "id": "T1", "kind": "terminal", "style": "ring", "stud": "M5", "part": { "vendor": "lcsc", "number": "C717313" } }
   ],
   "segments": [{ "id": "SEG1", "from": "J1", "to": "T1", "lengthMm": 150, "covering": "pet-braid" }],
   "wires": [{ "id": "W1", "from": "J1.1", "to": "T1", "gauge": "18 AWG", "color": "red" }],
@@ -42,6 +48,18 @@ A harness is a tree of **nodes** (connectors, terminals, splices, breakouts) joi
 ```
 
 Supported today: multi-branch harnesses, twisted pairs (`wireGroups`), ring/spade/ferrule/tinned/bare/solder-cup terminations, splices, heatshrink / PET braid / split loom / spiral wrap coverings, striped wire colors, per-node layout overrides.
+
+### Part sourcing
+
+`parts fetch` resolves every `part` reference against the distributor and embeds the record under the file's top-level `parts` object — drawings then render offline with product photos and a sourced BOM. LCSC needs no API key; Mouser and Digi-Key keys are yours:
+
+```bash
+node packages/cli/dist/index.js config set mouser.apiKey <key>          # mouser.com/api-hub
+node packages/cli/dist/index.js config set digikey.clientId <id>        # developer.digikey.com
+node packages/cli/dist/index.js config set digikey.clientSecret <secret>
+```
+
+Keys live in `~/.config/almond-harness-studio/config.json` (or `MOUSER_API_KEY`, `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET` env vars). The viewer also has an "API keys…" dialog — keys stay in the browser's localStorage and part lookups go through your local dev server.
 
 Full field documentation: [`skill/reference.md`](skill/reference.md). Worked examples: [`examples/`](examples/).
 
@@ -53,7 +71,7 @@ Install the skill so your agent designs harnesses in this format automatically:
 - **Claude Code**: copy `skill/` to `~/.claude/skills/almond-harness-studio/`
 - **Codex / other agents**: point your `AGENTS.md` at `skill/SKILL.md` (see this repo's [`AGENTS.md`](AGENTS.md) for a template)
 
-The agent loop: write JSON → `validate` (schema plus referential checks: pin references, route continuity, tree topology) → `export` PDF. Humans watch progress in the live viewer (`dev`), which hot-reloads on every file save.
+The agent loop: write JSON → `validate` (schema plus referential checks: pin references, route continuity, tree topology) → `parts fetch` (resolve distributor data) → `export` PDF. Humans watch progress in the live viewer (`dev`), which hot-reloads on every file save.
 
 ## Hosting the viewer
 
@@ -71,7 +89,7 @@ The local CLI (`dev`) remains the full experience: a whole folder in the sidebar
 |---|---|
 | `packages/core` | Types, JSON Schema, validator, tree layout, pure SVG-string renderer (no React — runs in Node and the browser) |
 | `packages/app` | React viewer: file sidebar, zoom/pan preview, inline validation errors, PDF/SVG download, print, drag-drop demo mode |
-| `packages/cli` | `dev` server (serves viewer + file API + SSE live reload), `validate`, `export` (pdfkit vector PDF) |
+| `packages/cli` | `dev` server (serves viewer + file API + SSE live reload + part-lookup proxy), `validate`, `parts fetch`, `config`, `export` (pdfkit vector PDF) |
 | `skill/` | Portable agent skill (SKILL.md + reference + examples) |
 | `examples/` | Sample harnesses |
 

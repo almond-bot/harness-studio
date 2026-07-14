@@ -5,8 +5,17 @@ import http from "node:http";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { Command } from "commander";
-import { validateHarness, renderHarnessSvg, type Harness } from "@almond-harness-studio/core";
+import {
+  validateHarness,
+  renderHarnessSvg,
+  collectPartRefs,
+  formatSource,
+  partKey,
+  type Harness,
+  type PartsCache,
+} from "@almond-harness-studio/core";
 import { createApiHandler } from "./middleware.js";
+import { CONFIG_PATH, loadConfig, resolvePart, saveConfigValue } from "./vendors.js";
 
 const program = new Command();
 program
@@ -100,6 +109,97 @@ program
       stream.on("error", reject);
     });
     console.log(`✓ wrote ${out}`);
+  });
+
+const parts = program.command("parts").description("Source components from LCSC, Mouser, and Digi-Key");
+
+parts
+  .command("fetch")
+  .description("Resolve every part reference against its distributor and embed the data in the file")
+  .argument("<files...>", "harness JSON files")
+  .option("--refresh", "re-fetch parts that are already resolved")
+  .action(async (files: string[], opts: { refresh?: boolean }) => {
+    const config = await loadConfig();
+    let failed = 0;
+    for (const file of files) {
+      let harness: Harness;
+      try {
+        harness = JSON.parse(await fs.readFile(file, "utf8")) as Harness;
+      } catch (err) {
+        console.error(`✗ ${file}: ${(err as Error).message}`);
+        failed++;
+        continue;
+      }
+      const cache: PartsCache = { ...(harness.parts ?? {}) };
+      const refs = collectPartRefs(harness);
+      if (refs.length === 0) {
+        console.log(`  ${file}: no part references`);
+        continue;
+      }
+      let changed = false;
+      for (const ref of refs) {
+        const key = partKey(ref);
+        if (cache[key] && !opts.refresh) {
+          console.log(`  ✓ ${formatSource(ref)} (cached) ${cache[key].mpn}`);
+          continue;
+        }
+        try {
+          const resolved = await resolvePart(ref, config);
+          cache[key] = resolved;
+          changed = true;
+          console.log(`  ✓ ${formatSource(ref)} → ${resolved.manufacturer} ${resolved.mpn}`);
+        } catch (err) {
+          console.error(`  ✗ ${formatSource(ref)}: ${(err as Error).message}`);
+          failed++;
+        }
+      }
+      // Prune cache entries no longer referenced
+      const wanted = new Set(refs.map(partKey));
+      for (const key of Object.keys(cache)) {
+        if (!wanted.has(key)) {
+          delete cache[key];
+          changed = true;
+        }
+      }
+      if (changed) {
+        harness.parts = cache;
+        await fs.writeFile(file, JSON.stringify(harness, null, 2) + "\n", "utf8");
+        console.log(`✓ ${file}: parts embedded`);
+      }
+    }
+    if (failed > 0) process.exit(1);
+  });
+
+const config = program
+  .command("config")
+  .description("Manage distributor API keys (Mouser, Digi-Key; LCSC needs no key)");
+
+config
+  .command("set")
+  .description("Set an API key, e.g. `config set mouser.apiKey <key>`")
+  .argument("<key>", "mouser.apiKey | digikey.clientId | digikey.clientSecret")
+  .argument("<value>")
+  .action(async (key: string, value: string) => {
+    try {
+      await saveConfigValue(key, value);
+      console.log(`✓ saved ${key} to ${CONFIG_PATH}`);
+    } catch (err) {
+      console.error(`✗ ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+config
+  .command("list")
+  .description("Show configured keys (masked)")
+  .action(async () => {
+    const cfg = await loadConfig();
+    const mask = (v?: string) => (v ? `${v.slice(0, 4)}…${v.slice(-4)}` : "(not set)");
+    console.log(`config file: ${CONFIG_PATH}`);
+    console.log(`  mouser.apiKey        ${mask(cfg.mouser?.apiKey)}`);
+    console.log(`  digikey.clientId     ${mask(cfg.digikey?.clientId)}`);
+    console.log(`  digikey.clientSecret ${mask(cfg.digikey?.clientSecret)}`);
+    console.log(`  lcsc                 no key required`);
   });
 
 const MIME: Record<string, string> = {
