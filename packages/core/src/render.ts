@@ -104,7 +104,7 @@ function renderTable(x: number, y: number, columns: Column[], rows: string[][], 
     const ry = top + TABLE_HEADER_H + r * TABLE_ROW_H;
     if (r > 0) {
       parts.push(
-        `<line x1="${fmt(x)}" y1="${fmt(ry)}" x2="${fmt(x + width)}" y2="${fmt(ry)}" stroke="#999" stroke-width="0.5"/>`
+        `<line x1="${fmt(x)}" y1="${fmt(ry)}" x2="${fmt(x + width)}" y2="${fmt(ry)}" stroke="#111" stroke-width="0.5"/>`
       );
     }
     let cellX = x;
@@ -353,11 +353,11 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
       const rowY = box.y + CONNECTOR_HEADER + i * PIN_ROW;
       if (i > 0) {
         parts.push(
-          `<line x1="${fmt(box.x)}" y1="${fmt(rowY)}" x2="${fmt(box.x + box.width)}" y2="${fmt(rowY)}" stroke="#bbb" stroke-width="0.5"/>`
+          `<line x1="${fmt(box.x)}" y1="${fmt(rowY)}" x2="${fmt(box.x + box.width)}" y2="${fmt(rowY)}" stroke="#111" stroke-width="0.5"/>`
         );
       }
       parts.push(
-        `<rect x="${fmt(pinCellX)}" y="${fmt(rowY)}" width="${pinCellW}" height="${PIN_ROW}" fill="#fafafa" stroke="#bbb" stroke-width="0.5"/>`
+        `<rect x="${fmt(pinCellX)}" y="${fmt(rowY)}" width="${pinCellW}" height="${PIN_ROW}" fill="#fafafa" stroke="#111" stroke-width="0.5"/>`
       );
       parts.push(text(pinCellX + pinCellW / 2, rowY + 12.5, pin.id, { size: 9, weight: "bold", anchor: "middle" }));
       if (pin.label) {
@@ -399,35 +399,65 @@ function renderSegments(layout: LayoutResult): string {
     const { from, to, segment } = line;
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    const len = Math.hypot(dx, dy);
+    const len = Math.hypot(dx, dy) || 1;
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
     const bandH = Math.max(12, line.wires.length * 4 + 8);
+    const covered = segment.covering && segment.covering !== "none";
 
-    let bandFill = "#e9e9e9";
-    let extras = "";
-    if (segment.covering === "heatshrink") bandFill = "#d7e7f7";
-    else if (segment.covering === "pet-braid") bandFill = "url(#petBraid)";
-    else if (segment.covering === "spiral-wrap") bandFill = "url(#spiralWrap)";
-    else if (segment.covering === "split-loom") bandFill = "#dcdcdc";
-    if (segment.covering && segment.covering !== "none") {
-      extras = `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="none" stroke="#666" stroke-width="1"${segment.covering === "split-loom" ? ` stroke-dasharray="6 3"` : ""}/>`;
+    // Bare bundle runs show the wires alone; a band is only drawn for coverings
+    if (covered) {
+      let bandFill = "#e9e9e9";
+      if (segment.covering === "heatshrink") bandFill = "#d7e7f7";
+      else if (segment.covering === "pet-braid") bandFill = "url(#petBraid)";
+      else if (segment.covering === "spiral-wrap") bandFill = "url(#spiralWrap)";
+      else if (segment.covering === "split-loom") bandFill = "#dcdcdc";
+      parts.push(
+        `<g transform="translate(${fmt(from.x)} ${fmt(from.y)}) rotate(${fmt(angle)})">` +
+          `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="${bandFill}"/>` +
+          `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="none" stroke="#666" stroke-width="1"${segment.covering === "split-loom" ? ` stroke-dasharray="6 3"` : ""}/>` +
+          `</g>`
+      );
     }
-    parts.push(
-      `<g transform="translate(${fmt(from.x)} ${fmt(from.y)}) rotate(${fmt(angle)})">` +
-        `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="${bandFill}"/>` +
-        extras +
-        `</g>`
-    );
+
+  }
+  return parts.join("\n");
+}
+
+/** Segment callouts, drawn above the wires and offset perpendicular to the run. */
+function renderSegmentLabels(layout: LayoutResult): string {
+  const parts: string[] = [];
+  for (const line of layout.segmentLines.values()) {
+    const { from, to, segment } = line;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const bandH = Math.max(12, line.wires.length * 4 + 8);
+    const covered = segment.covering && segment.covering !== "none";
 
     const mx = (from.x + to.x) / 2;
     const my = (from.y + to.y) / 2;
-    const labelParts = [`${segment.id} · ${segment.lengthMm} mm`];
-    if (segment.covering && segment.covering !== "none") {
-      labelParts.push(COVERING_LABELS[segment.covering] ?? segment.covering.toUpperCase());
+    let px = -dy / len;
+    let py = dx / len;
+    if (py < 0) {
+      px = -px;
+      py = -py;
     }
-    parts.push(text(mx, my + bandH / 2 + 12, labelParts[0], { size: 8.5, anchor: "middle", fill: "#333" }));
+    const clear = (covered ? bandH / 2 : 4) + 12;
+    const labelParts = [`${segment.id} · ${segment.lengthMm} mm`];
+    if (covered) {
+      labelParts.push(COVERING_LABELS[segment.covering!] ?? segment.covering!.toUpperCase());
+    }
+    parts.push(
+      haloText(mx + px * clear, my + py * clear + 3, labelParts[0], { size: 8.5, anchor: "middle", fill: "#333" })
+    );
     if (labelParts[1]) {
-      parts.push(text(mx, my + bandH / 2 + 22, labelParts[1], { size: 7.5, anchor: "middle", fill: "#666" }));
+      parts.push(
+        haloText(mx + px * (clear + 10), my + py * (clear + 10) + 3, labelParts[1], {
+          size: 7.5,
+          anchor: "middle",
+          fill: "#666",
+        })
+      );
     }
   }
   return parts.join("\n");
@@ -890,6 +920,7 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   parts.push(renderSegments(layout));
   parts.push(renderCableSheaths(harness, layout, groupRuns));
   parts.push(renderWires(harness, layout, groupRuns));
+  parts.push(renderSegmentLabels(layout));
   parts.push(renderGroupLabels(groupRuns));
   for (const box of layout.boxes.values()) parts.push(renderNode(box, layout, partsCache));
   parts.push(`</g>`);
