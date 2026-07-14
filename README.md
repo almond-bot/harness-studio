@@ -1,5 +1,7 @@
 # almond-harness-studio
 
+![Almond Harness Studio viewer showing a branched battery pigtail drawing with BOM, wire list, and assembly detail](docs/viewer.png)
+
 Wire harness drawings from JSON. Design harnesses as `*.harness.json` files (by hand or with a coding agent), preview them live in the browser, and export manufacturer-ready vector PDFs with an auto-derived BOM, wire list, and title block.
 
 - **Local-first**: your harness data stays in your own folders and repos. No accounts, no uploads, no backend.
