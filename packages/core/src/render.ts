@@ -13,6 +13,102 @@ import { buildBom, buildWireList } from "./bom.js";
 
 const FONT = "Helvetica, Arial, sans-serif";
 
+export type RenderTheme = "light" | "dark";
+
+export interface RenderOptions {
+  /**
+   * "light" is the manufacturing drawing (white sheet) and the only theme
+   * exports should use; "dark" exists for on-screen previews.
+   */
+  theme?: RenderTheme;
+}
+
+interface ThemeColors {
+  paper: string;
+  ink: string;
+  textMuted: string;
+  textSoft: string;
+  textDim: string;
+  textFaint: string;
+  tableHeader: string;
+  panel: string;
+  panelSoft: string;
+  cardStroke: string;
+  band: string;
+  bandHeatshrink: string;
+  bandLoom: string;
+  bandStroke: string;
+  patternBg: string;
+  patternFg: string;
+  shieldBraidBg: string;
+  shieldBraidFg: string;
+  shieldFoilBg: string;
+  shieldFoilFg: string;
+  cableJacket: string;
+  cableInner: string;
+  /** Wire base colors that need a contrast outline against the paper */
+  outlinedWires: string[];
+  wireOutline: string;
+}
+
+const THEMES: Record<RenderTheme, ThemeColors> = {
+  light: {
+    paper: "white",
+    ink: "#111",
+    textMuted: "#333",
+    textSoft: "#555",
+    textDim: "#666",
+    textFaint: "#999",
+    tableHeader: "#ececec",
+    panel: "#f0f0f0",
+    panelSoft: "#fafafa",
+    cardStroke: "#d0d0d0",
+    band: "#e9e9e9",
+    bandHeatshrink: "#d7e7f7",
+    bandLoom: "#dcdcdc",
+    bandStroke: "#666",
+    patternBg: "#efefef",
+    patternFg: "#b5b5b5",
+    shieldBraidBg: "#e2e2e2",
+    shieldBraidFg: "#8a8a8a",
+    shieldFoilBg: "#e8e8e8",
+    shieldFoilFg: "#9a9a9a",
+    cableJacket: "#4a4a4a",
+    cableInner: "#f6f6f6",
+    outlinedWires: ["#f2f2f2", "#e6c700"],
+    wireOutline: "#999",
+  },
+  dark: {
+    paper: "#18181a",
+    ink: "#e6e6e6",
+    textMuted: "#c4c4c4",
+    textSoft: "#a8a8a8",
+    textDim: "#9a9a9a",
+    textFaint: "#767676",
+    tableHeader: "#2a2a2d",
+    panel: "#2a2a2d",
+    panelSoft: "#202023",
+    cardStroke: "#3f3f42",
+    band: "#2c2c2f",
+    bandHeatshrink: "#243447",
+    bandLoom: "#2e2e31",
+    bandStroke: "#8a8a8a",
+    patternBg: "#26262a",
+    patternFg: "#6e6e72",
+    shieldBraidBg: "#2c2c2f",
+    shieldBraidFg: "#87878b",
+    shieldFoilBg: "#2b2b2e",
+    shieldFoilFg: "#808084",
+    cableJacket: "#7a7a7e",
+    cableInner: "#222226",
+    outlinedWires: ["#1a1a1a", "#7b4a12"],
+    wireOutline: "#8a8a8a",
+  },
+};
+
+/** Active palette for the render in progress (rendering is synchronous). */
+let T = THEMES.light;
+
 const SHEETS: Record<SheetSize, { width: number; height: number }> = {
   "ANSI B": { width: 1632, height: 1056 },
   Letter: { width: 1056, height: 816 },
@@ -40,16 +136,16 @@ interface TextOpts {
 }
 
 function text(x: number, y: number, str: string, opts: TextOpts = {}): string {
-  const { size = 10, weight = "normal", anchor = "start", fill = "#111" } = opts;
+  const { size = 10, weight = "normal", anchor = "start", fill = T.ink } = opts;
   return `<text x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" fill="${fill}">${esc(str)}</text>`;
 }
 
-/** Text with a white halo so labels stay readable over wires without patch rectangles. */
+/** Text with a paper-colored halo so labels stay readable over wires without patch rectangles. */
 function haloText(x: number, y: number, str: string, opts: TextOpts = {}): string {
-  const { size = 10, weight = "normal", anchor = "start", fill = "#111" } = opts;
+  const { size = 10, weight = "normal", anchor = "start", fill = T.ink } = opts;
   const common = `x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}"`;
   return (
-    `<text ${common} fill="white" stroke="white" stroke-width="3" stroke-linejoin="round">${esc(str)}</text>` +
+    `<text ${common} fill="${T.paper}" stroke="${T.paper}" stroke-width="3" stroke-linejoin="round">${esc(str)}</text>` +
     `<text ${common} fill="${fill}">${esc(str)}</text>`
   );
 }
@@ -79,7 +175,7 @@ function tableHeight(rowCount: number, title?: string): number {
 }
 
 function gridLine(x1: number, y1: number, x2: number, y2: number): string {
-  return `<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="#111" stroke-width="${GRID_W}"/>`;
+  return `<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="${T.ink}" stroke-width="${GRID_W}"/>`;
 }
 
 function renderTable(x: number, y: number, columns: Column[], rows: string[][], title?: string): string {
@@ -93,8 +189,8 @@ function renderTable(x: number, y: number, columns: Column[], rows: string[][], 
   const height = TABLE_HEADER_H + rows.length * TABLE_ROW_H;
 
   // Fills first, then a single pass of uniform grid lines — nothing overlaps
-  parts.push(`<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="white"/>`);
-  parts.push(`<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${TABLE_HEADER_H}" fill="#ececec"/>`);
+  parts.push(`<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="${T.paper}"/>`);
+  parts.push(`<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${TABLE_HEADER_H}" fill="${T.tableHeader}"/>`);
 
   parts.push(gridLine(x, top + TABLE_HEADER_H, x + width, top + TABLE_HEADER_H));
   rows.forEach((_, r) => {
@@ -111,7 +207,7 @@ function renderTable(x: number, y: number, columns: Column[], rows: string[][], 
     cx += col.width;
   });
   parts.push(
-    `<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="none" stroke="#111" stroke-width="${BORDER_W}"/>`
+    `<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="none" stroke="${T.ink}" stroke-width="${BORDER_W}"/>`
   );
 
   rows.forEach((row, r) => {
@@ -151,10 +247,10 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
   const symX = box.facesRight ? box.x + box.width - 16 : box.x + 16;
   const tailDir = box.facesRight ? 1 : -1;
   const parts: string[] = [];
-  const stroke = `stroke="#111" stroke-width="1.5" fill="none"`;
+  const stroke = `stroke="${T.ink}" stroke-width="1.5" fill="none"`;
 
   parts.push(
-    `<line x1="${fmt(anchorX)}" y1="${fmt(cy)}" x2="${fmt(symX)}" y2="${fmt(cy)}" stroke="#111" stroke-width="1.5"/>`
+    `<line x1="${fmt(anchorX)}" y1="${fmt(cy)}" x2="${fmt(symX)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="1.5"/>`
   );
   switch (node.style) {
     case "ring":
@@ -172,18 +268,18 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
     case "ferrule":
       parts.push(
         `<rect x="${fmt(symX - (tailDir > 0 ? 16 : 0))}" y="${fmt(cy - 4)}" width="16" height="8" ${stroke}/>`,
-        `<line x1="${fmt(symX - tailDir * 16)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 24)}" y2="${fmt(cy)}" stroke="#111" stroke-width="2.5"/>`
+        `<line x1="${fmt(symX - tailDir * 16)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 24)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="2.5"/>`
       );
       break;
     case "tinned":
       parts.push(
-        `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 18)}" y2="${fmt(cy)}" stroke="#111" stroke-width="3.5"/>`
+        `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 18)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="3.5"/>`
       );
       break;
     case "bare":
       for (const dy of [-5, 0, 5]) {
         parts.push(
-          `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 16)}" y2="${fmt(cy + dy)}" stroke="#111" stroke-width="1"/>`
+          `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 16)}" y2="${fmt(cy + dy)}" stroke="${T.ink}" stroke-width="1"/>`
         );
       }
       break;
@@ -192,7 +288,7 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
       const bx = symX - (tailDir > 0 ? 20 : 0);
       parts.push(
         `<rect x="${fmt(bx + (tailDir > 0 ? 12 : 0))}" y="${fmt(cy - 5)}" width="8" height="10" ${stroke}/>`,
-        `<rect x="${fmt(bx + (tailDir > 0 ? 0 : 8))}" y="${fmt(cy - 2.5)}" width="12" height="5" fill="#111"/>`
+        `<rect x="${fmt(bx + (tailDir > 0 ? 0 : 8))}" y="${fmt(cy - 2.5)}" width="12" height="5" fill="${T.ink}"/>`
       );
       break;
     }
@@ -201,7 +297,7 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
       const fx = symX - (tailDir > 0 ? 18 : 0);
       parts.push(
         `<rect x="${fmt(fx)}" y="${fmt(cy - 6)}" width="18" height="12" rx="2" ${stroke}/>`,
-        `<line x1="${fmt(symX - tailDir * 18)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 12)}" y2="${fmt(cy)}" stroke="#111" stroke-width="1.5"/>`
+        `<line x1="${fmt(symX - tailDir * 18)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 12)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="1.5"/>`
       );
       break;
     }
@@ -227,7 +323,7 @@ function renderInlineComponent(box: NodeBox, layout: LayoutResult, resolved?: Re
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   const parts: string[] = [];
-  const stroke = `stroke="#111" stroke-width="1.5"`;
+  const stroke = `stroke="${T.ink}" stroke-width="1.5"`;
 
   // Lead stubs to the box edges so incoming wires meet the symbol
   parts.push(
@@ -243,8 +339,8 @@ function renderInlineComponent(box: NodeBox, layout: LayoutResult, resolved?: Re
     const tipX = cx + dir * 10;
     const baseX = cx - dir * 10;
     parts.push(
-      `<path d="M ${fmt(baseX)} ${fmt(cy - 9)} L ${fmt(baseX)} ${fmt(cy + 9)} L ${fmt(tipX)} ${fmt(cy)} Z" fill="white" ${stroke}/>`,
-      `<line x1="${fmt(tipX)}" y1="${fmt(cy - 9)}" x2="${fmt(tipX)}" y2="${fmt(cy + 9)}" stroke="#111" stroke-width="2"/>`
+      `<path d="M ${fmt(baseX)} ${fmt(cy - 9)} L ${fmt(baseX)} ${fmt(cy + 9)} L ${fmt(tipX)} ${fmt(cy)} Z" fill="${T.paper}" ${stroke}/>`,
+      `<line x1="${fmt(tipX)}" y1="${fmt(cy - 9)}" x2="${fmt(tipX)}" y2="${fmt(cy + 9)}" stroke="${T.ink}" stroke-width="2"/>`
     );
   } else {
     // Zigzag resistor
@@ -322,7 +418,7 @@ function renderPartsGallery(
     const cx = x + (i % perRow) * (cardW + gap);
     const cy = y + Math.floor(i / perRow) * (cardH + gap);
     parts.push(
-      `<rect x="${fmt(cx)}" y="${fmt(cy)}" width="${cardW}" height="${cardH}" fill="white" stroke="#d0d0d0" stroke-width="0.75"/>`,
+      `<rect x="${fmt(cx)}" y="${fmt(cy)}" width="${cardW}" height="${cardH}" fill="${T.paper}" stroke="${T.cardStroke}" stroke-width="0.75"/>`,
       `<image x="${fmt(cx + 9)}" y="${fmt(cy + 5)}" width="56" height="56" href="${resolved.image}" preserveAspectRatio="xMidYMid meet"/>`,
       text(cx + cardW / 2, cy + 72, fitText(users.join(" "), cardW - 4, 8), {
         size: 8,
@@ -332,7 +428,7 @@ function renderPartsGallery(
       text(cx + cardW / 2, cy + 84, fitText(resolved.mpn, cardW - 4, 6.5), {
         size: 6.5,
         anchor: "middle",
-        fill: "#555",
+        fill: T.textSoft,
       })
     );
     i++;
@@ -351,12 +447,12 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
     const pinsTop = box.y + CONNECTOR_HEADER;
 
     // Fills first, then each divider once, then the outer border
-    parts.push(`<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="white"/>`);
+    parts.push(`<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="${T.paper}"/>`);
     parts.push(
-      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${CONNECTOR_HEADER}" fill="#f0f0f0"/>`
+      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${CONNECTOR_HEADER}" fill="${T.panel}"/>`
     );
     parts.push(
-      `<rect x="${fmt(pinCellX)}" y="${fmt(pinsTop)}" width="${pinCellW}" height="${fmt(box.height - CONNECTOR_HEADER)}" fill="#fafafa"/>`
+      `<rect x="${fmt(pinCellX)}" y="${fmt(pinsTop)}" width="${pinCellW}" height="${fmt(box.height - CONNECTOR_HEADER)}" fill="${T.panelSoft}"/>`
     );
     parts.push(gridLine(box.x, pinsTop, box.x + box.width, pinsTop));
     node.pins.forEach((_, i) => {
@@ -368,12 +464,12 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
     const cellDividerX = box.facesRight ? pinCellX : pinCellX + pinCellW;
     parts.push(gridLine(cellDividerX, pinsTop, cellDividerX, box.y + box.height));
     parts.push(
-      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="none" stroke="#111" stroke-width="${BORDER_W}"/>`
+      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="none" stroke="${T.ink}" stroke-width="${BORDER_W}"/>`
     );
 
     parts.push(text(box.x + 6, box.y + 14, node.id, { size: 11, weight: "bold" }));
     const sub = resolved?.mpn ?? `${node.part.vendor.toUpperCase()} ${node.part.number}`;
-    parts.push(text(box.x + 6, box.y + 27, sub, { size: 8, fill: "#333" }));
+    parts.push(text(box.x + 6, box.y + 27, sub, { size: 8, fill: T.textMuted }));
     node.pins.forEach((pin, i) => {
       const rowY = pinsTop + i * PIN_ROW;
       parts.push(text(pinCellX + pinCellW / 2, rowY + 12.5, pin.id, { size: 9, weight: "bold", anchor: "middle" }));
@@ -388,7 +484,7 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
   } else if (node.kind === "splice") {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="6" fill="#111"/>`);
+    parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="6" fill="${T.ink}"/>`);
     const label = node.method ? `${node.id} (${node.method.toUpperCase()})` : node.id;
     parts.push(text(cx, box.y - 4, label, { size: 8.5, weight: "bold", anchor: "middle" }));
   } else if (node.kind === "diode" || node.kind === "resistor") {
@@ -397,8 +493,8 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
   } else {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="4.5" fill="#333"/>`);
-    parts.push(text(cx, box.y - 4, node.id, { size: 8, anchor: "middle", fill: "#555" }));
+    parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="4.5" fill="${T.textMuted}"/>`);
+    parts.push(text(cx, box.y - 4, node.id, { size: 8, anchor: "middle", fill: T.textSoft }));
   }
   return parts.join("\n");
 }
@@ -423,15 +519,15 @@ function renderSegments(layout: LayoutResult): string {
 
     // Bare bundle runs show the wires alone; a band is only drawn for coverings
     if (covered) {
-      let bandFill = "#e9e9e9";
-      if (segment.covering === "heatshrink") bandFill = "#d7e7f7";
+      let bandFill = T.band;
+      if (segment.covering === "heatshrink") bandFill = T.bandHeatshrink;
       else if (segment.covering === "pet-braid") bandFill = "url(#petBraid)";
       else if (segment.covering === "spiral-wrap") bandFill = "url(#spiralWrap)";
-      else if (segment.covering === "split-loom") bandFill = "#dcdcdc";
+      else if (segment.covering === "split-loom") bandFill = T.bandLoom;
       parts.push(
         `<g transform="translate(${fmt(from.x)} ${fmt(from.y)}) rotate(${fmt(angle)})">` +
           `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="${bandFill}"/>` +
-          `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="none" stroke="#666" stroke-width="1"${segment.covering === "split-loom" ? ` stroke-dasharray="6 3"` : ""}/>` +
+          `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="none" stroke="${T.bandStroke}" stroke-width="1"${segment.covering === "split-loom" ? ` stroke-dasharray="6 3"` : ""}/>` +
           `</g>`
       );
     }
@@ -465,14 +561,14 @@ function renderSegmentLabels(layout: LayoutResult): string {
       labelParts.push(COVERING_LABELS[segment.covering!] ?? segment.covering!.toUpperCase());
     }
     parts.push(
-      haloText(mx + px * clear, my + py * clear + 3, labelParts[0], { size: 8.5, anchor: "middle", fill: "#333" })
+      haloText(mx + px * clear, my + py * clear + 3, labelParts[0], { size: 8.5, anchor: "middle", fill: T.textMuted })
     );
     if (labelParts[1]) {
       parts.push(
         haloText(mx + px * (clear + 10), my + py * (clear + 10) + 3, labelParts[1], {
           size: 7.5,
           anchor: "middle",
-          fill: "#666",
+          fill: T.textDim,
         })
       );
     }
@@ -686,10 +782,9 @@ function renderWires(harness: Harness, layout: LayoutResult, groupRuns: GroupRun
       }
       d = buildWireD(pieces);
     }
-    const light = color.base === "#f2f2f2" || color.base === "#e6c700";
-    if (light) {
+    if (T.outlinedWires.includes(color.base)) {
       parts.push(
-        `<path d="${d}" fill="none" stroke="#999" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`
+        `<path d="${d}" fill="none" stroke="${T.wireOutline}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`
       );
     }
     parts.push(
@@ -718,18 +813,18 @@ function renderCableSheaths(harness: Harness, layout: LayoutResult, groupRuns: G
       // Jacket only where the cable runs by itself; in mixed bundles just the cores show
       if (!run.pure.has(segId)) continue;
       const d = `M ${fmt(start.x)} ${fmt(start.y)} L ${fmt(end.x)} ${fmt(end.y)}`;
-      parts.push(`<path d="${d}" fill="none" stroke="#4a4a4a" stroke-width="${fmt(h)}" stroke-linecap="round"/>`);
+      parts.push(`<path d="${d}" fill="none" stroke="${T.cableJacket}" stroke-width="${fmt(h)}" stroke-linecap="round"/>`);
       if (shield) {
         const rim = shield === "braid" ? "url(#shieldBraid)" : "url(#shieldFoil)";
         parts.push(
           `<path d="${d}" fill="none" stroke="${rim}" stroke-width="${fmt(h - 2.5)}" stroke-linecap="round"/>`
         );
         parts.push(
-          `<path d="${d}" fill="none" stroke="#f6f6f6" stroke-width="${fmt(h - 7.5)}" stroke-linecap="round"/>`
+          `<path d="${d}" fill="none" stroke="${T.cableInner}" stroke-width="${fmt(h - 7.5)}" stroke-linecap="round"/>`
         );
       } else {
         parts.push(
-          `<path d="${d}" fill="none" stroke="#f6f6f6" stroke-width="${fmt(h - 2.5)}" stroke-linecap="round"/>`
+          `<path d="${d}" fill="none" stroke="${T.cableInner}" stroke-width="${fmt(h - 2.5)}" stroke-linecap="round"/>`
         );
       }
     }
@@ -782,18 +877,18 @@ function renderTitleBlock(x: number, y: number, w: number, h: number, harness: H
   const c4 = w - c1 - c2 - c3;
 
   // Fill, then each divider exactly once, then the outer border
-  parts.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="white"/>`);
+  parts.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="${T.paper}"/>`);
   parts.push(gridLine(x, y + row1, x + w, y + row1));
   parts.push(gridLine(x, y + row1 + row2, x + w, y + row1 + row2));
   parts.push(gridLine(x + c1, y + row1, x + c1, y + h));
   parts.push(gridLine(x + c1 + c2, y + row1, x + c1 + c2, y + row1 + row2));
   parts.push(gridLine(x + c1 + c2 + c3, y + row1, x + c1 + c2 + c3, y + h));
   parts.push(
-    `<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="none" stroke="#111" stroke-width="${BORDER_W}"/>`
+    `<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="none" stroke="${T.ink}" stroke-width="${BORDER_W}"/>`
   );
 
   const field = (fx: number, fy: number, fh: number, caption: string, value: string, valueSize = 10) => {
-    parts.push(text(fx + 4, fy + 9, caption, { size: 6, fill: "#666" }));
+    parts.push(text(fx + 4, fy + 9, caption, { size: 6, fill: T.textDim }));
     parts.push(text(fx + 4, fy + fh - 5, value, { size: valueSize, weight: "bold" }));
   };
 
@@ -814,7 +909,8 @@ export interface RenderResult {
   height: number;
 }
 
-export function renderHarnessSvg(harness: Harness): RenderResult {
+export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}): RenderResult {
+  T = THEMES[options.theme ?? "light"];
   const sheet: SheetSize = harness.meta.sheet ?? "ANSI B";
   const { width: W, height: H } = SHEETS[sheet];
   const margin = 18;
@@ -832,26 +928,26 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   parts.push(
     `<defs>` +
       `<pattern id="petBraid" width="7" height="7" patternUnits="userSpaceOnUse">` +
-      `<rect width="7" height="7" fill="#efefef"/>` +
-      `<path d="M 0 7 L 7 0 M 0 0 L 7 7" stroke="#b5b5b5" stroke-width="0.8"/>` +
+      `<rect width="7" height="7" fill="${T.patternBg}"/>` +
+      `<path d="M 0 7 L 7 0 M 0 0 L 7 7" stroke="${T.patternFg}" stroke-width="0.8"/>` +
       `</pattern>` +
       `<pattern id="spiralWrap" width="8" height="8" patternUnits="userSpaceOnUse">` +
-      `<rect width="8" height="8" fill="#efefef"/>` +
-      `<path d="M 0 8 L 8 0" stroke="#b5b5b5" stroke-width="1.5"/>` +
+      `<rect width="8" height="8" fill="${T.patternBg}"/>` +
+      `<path d="M 0 8 L 8 0" stroke="${T.patternFg}" stroke-width="1.5"/>` +
       `</pattern>` +
       `<pattern id="shieldBraid" width="6" height="6" patternUnits="userSpaceOnUse">` +
-      `<rect width="6" height="6" fill="#e2e2e2"/>` +
-      `<path d="M 0 6 L 6 0 M 0 0 L 6 6" stroke="#8a8a8a" stroke-width="0.7"/>` +
+      `<rect width="6" height="6" fill="${T.shieldBraidBg}"/>` +
+      `<path d="M 0 6 L 6 0 M 0 0 L 6 6" stroke="${T.shieldBraidFg}" stroke-width="0.7"/>` +
       `</pattern>` +
       `<pattern id="shieldFoil" width="8" height="8" patternUnits="userSpaceOnUse">` +
-      `<rect width="8" height="8" fill="#e8e8e8"/>` +
-      `<path d="M 0 8 L 8 0" stroke="#9a9a9a" stroke-width="0.7"/>` +
+      `<rect width="8" height="8" fill="${T.shieldFoilBg}"/>` +
+      `<path d="M 0 8 L 8 0" stroke="${T.shieldFoilFg}" stroke-width="0.7"/>` +
       `</pattern>` +
       `</defs>`
   );
-  parts.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="white"/>`);
+  parts.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="${T.paper}"/>`);
   parts.push(
-    `<rect x="${frame.x}" y="${frame.y}" width="${frame.w}" height="${frame.h}" fill="none" stroke="#111" stroke-width="2"/>`
+    `<rect x="${frame.x}" y="${frame.y}" width="${frame.w}" height="${frame.h}" fill="none" stroke="${T.ink}" stroke-width="2"/>`
   );
 
   // BOM: top-right
@@ -960,7 +1056,7 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   parts.push(`</g>`);
 
   parts.push(
-    text(frame.x + 4, H - 6, "Generated by almond-harness-studio", { size: 7, fill: "#999" })
+    text(frame.x + 4, H - 6, "Generated by almond-harness-studio", { size: 7, fill: T.textFaint })
   );
   parts.push(`</svg>`);
 

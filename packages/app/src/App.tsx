@@ -14,6 +14,20 @@ import { demos } from "./demos";
 const canPickFiles = typeof window !== "undefined" && !!window.showOpenFilePicker;
 const canPickFolder = typeof window !== "undefined" && !!window.showDirectoryPicker;
 
+/** Tracks prefers-color-scheme; the preview follows it while exports stay light. */
+function useSystemDark(): boolean {
+  const [dark, setDark] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => setDark(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return dark;
+}
+
 interface FolderFile {
   name: string;
   handle: FileSystemFileHandle;
@@ -21,6 +35,7 @@ interface FolderFile {
 
 export function App() {
   const { server, refresh } = useHarnessServer();
+  const systemDark = useSystemDark();
   const [selected, setSelected] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<LoadedHarness | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -428,7 +443,11 @@ export function App() {
         ) : null}
 
         {loaded?.svg ? (
-          <Preview svg={loaded.svg} sheetWidth={loaded.sheetWidth!} sheetHeight={loaded.sheetHeight!} />
+          <Preview
+            svg={systemDark && loaded.svgDark ? loaded.svgDark : loaded.svg}
+            sheetWidth={loaded.sheetWidth!}
+            sheetHeight={loaded.sheetHeight!}
+          />
         ) : (
           !loaded && (
             <div className="placeholder">

@@ -86,6 +86,7 @@ The viewer is a static SPA — deploy `packages/app/dist` to any static host (Ve
 - **Open folder…** (Chrome/Edge) lists every `*.harness.json` in a local folder in the sidebar, live-watches the selected file, and picks up files added to the folder
 - Drag-and-drop works in all browsers — drop a file for a one-shot preview, or a folder to browse it (Chromium browsers get live watching too)
 - PDF/SVG download and print work entirely client-side
+- The preview follows the system light/dark mode; exports and print always use the white manufacturing sheet
 
 The local CLI (`dev`) remains the full experience: a whole folder in the sidebar plus push-based reload.
 

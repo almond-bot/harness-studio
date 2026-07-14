@@ -9,7 +9,10 @@ import {
 export interface LoadedHarness {
   sourceName: string;
   harness?: Harness;
+  /** Light theme — the manufacturing drawing; always used for PDF/SVG export and print */
   svg?: string;
+  /** Dark theme — on-screen preview only */
+  svgDark?: string;
   sheetWidth?: number;
   sheetHeight?: number;
   errors: ValidationIssue[];
@@ -33,10 +36,12 @@ export function parseHarnessText(sourceName: string, content: string): LoadedHar
   }
   try {
     const { svg, width, height } = renderHarnessSvg(result.harness);
+    const { svg: svgDark } = renderHarnessSvg(result.harness, { theme: "dark" });
     return {
       sourceName,
       harness: result.harness,
       svg,
+      svgDark,
       sheetWidth: width,
       sheetHeight: height,
       errors: [],

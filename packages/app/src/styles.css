@@ -483,7 +483,8 @@ button {
   position: absolute;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
   border-radius: 2px;
-  background: #fff;
+  /* The rendered SVG paints its own paper color (light or dark theme) */
+  background: transparent;
 }
 
 .sheet svg {
