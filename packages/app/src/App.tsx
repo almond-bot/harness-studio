@@ -162,16 +162,6 @@ export function App() {
     }
   }, [openFolder]);
 
-  // Leave folder mode and return to the dev server's file list
-  const closeFolder = useCallback(async () => {
-    setFolder(null);
-    setFolderFiles([]);
-    setFolderSelected(null);
-    setWatchedHandle(null);
-    if (server.files.length > 0) await openFile(server.files[0]);
-    else setLoaded(null);
-  }, [server.files, openFile]);
-
   // Keep the folder listing fresh: pick up files the user (or agent) adds/removes
   useEffect(() => {
     if (!folder) return;
@@ -292,11 +282,6 @@ export function App() {
               <button className="open-file" onClick={() => void pickFolder()}>
                 Open another folder
               </button>
-              {server.connected && (
-                <button className="link-button" onClick={() => void closeFolder()}>
-                  ← back to {server.dataDir?.split("/").pop() ?? "server files"}
-                </button>
-              )}
             </div>
           </>
         ) : server.connected ? (
@@ -317,13 +302,6 @@ export function App() {
               ))}
               {server.files.length === 0 && <li className="empty">no .harness.json files found</li>}
             </ul>
-            {canPickFolder && (
-              <div className="offline">
-                <button className="open-file" onClick={() => void pickFolder()}>
-                  Open folder
-                </button>
-              </div>
-            )}
           </>
         ) : (
           <>
