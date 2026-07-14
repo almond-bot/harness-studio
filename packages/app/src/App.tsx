@@ -270,7 +270,7 @@ export function App() {
             </ul>
             <div className="offline">
               <button className="open-file" onClick={() => void pickFolder()}>
-                Open another folder…
+                Open another folder
               </button>
               {server.connected && (
                 <button className="link-button" onClick={() => void closeFolder()}>
@@ -300,7 +300,7 @@ export function App() {
             {canPickFolder && (
               <div className="offline">
                 <button className="open-file" onClick={() => void pickFolder()}>
-                  Open folder…
+                  Open folder
                 </button>
               </div>
             )}
@@ -313,12 +313,12 @@ export function App() {
             </p>
             {canPickFiles && (
               <button className="open-file" onClick={() => void pickFile()}>
-                Open harness file…
+                Open harness file
               </button>
             )}
             {canPickFolder && (
               <button className="open-file" onClick={() => void pickFolder()}>
-                Open folder…
+                Open folder
               </button>
             )}
             <p className="offline-hint">
@@ -335,7 +335,7 @@ export function App() {
         )}
         <div className="sidebar-footer">
           <button className="link-button" onClick={() => setSettingsOpen(true)}>
-            API keys…
+            Edit API keys
           </button>
           <a href="https://github.com/almond-bot/harness-studio" target="_blank" rel="noreferrer">
             open source · MIT · Almond AI, Inc.
@@ -359,7 +359,7 @@ export function App() {
               <div className="actions">
                 {unresolvedParts > 0 && server.connected && selected && (
                   <button className="fetch-parts" disabled={fetchingParts} onClick={() => void fetchParts()}>
-                    {fetchingParts ? "Fetching…" : `Fetch ${unresolvedParts} part${unresolvedParts > 1 ? "s" : ""}`}
+                    {fetchingParts ? "Fetching parts" : `Fetch ${unresolvedParts} part${unresolvedParts > 1 ? "s" : ""}`}
                   </button>
                 )}
                 <button
@@ -426,12 +426,12 @@ export function App() {
               </p>
               {!server.connected && canPickFiles && (
                 <button className="open-file big" onClick={() => void pickFile()}>
-                  Open harness file…
+                  Open harness file
                 </button>
               )}
               {!server.connected && canPickFolder && (
                 <button className="open-file big" onClick={() => void pickFolder()}>
-                  Open folder…
+                  Open folder
                 </button>
               )}
             </div>
