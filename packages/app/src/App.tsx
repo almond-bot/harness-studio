@@ -9,6 +9,7 @@ import {
 } from "./useHarness";
 import { downloadPdf, downloadSvg, printSheet } from "./exportPdf";
 import { SettingsDialog, loadVendorKeys, type VendorKeys } from "./Settings";
+import { demos } from "./demos";
 
 const canPickFiles = typeof window !== "undefined" && !!window.showOpenFilePicker;
 const canPickFolder = typeof window !== "undefined" && !!window.showDirectoryPicker;
@@ -27,6 +28,7 @@ export function App() {
   const [folder, setFolder] = useState<FileSystemDirectoryHandle | null>(null);
   const [folderFiles, setFolderFiles] = useState<FolderFile[]>([]);
   const [folderSelected, setFolderSelected] = useState<string | null>(null);
+  const [demoSelected, setDemoSelected] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [keys, setKeys] = useState<VendorKeys>(() => loadVendorKeys());
   const [fetchingParts, setFetchingParts] = useState(false);
@@ -65,12 +67,23 @@ export function App() {
 
   const openFile = useCallback(async (path: string) => {
     setWatchedHandle(null);
+    setDemoSelected(null);
     setSelected(path);
     setLoaded(await fetchHarnessFile(path));
   }, []);
 
+  const openDemo = useCallback((name: string) => {
+    const demo = demos.find((d) => d.name === name);
+    if (!demo) return;
+    setSelected(null);
+    setWatchedHandle(null);
+    setDemoSelected(name);
+    setLoaded(demo.load());
+  }, []);
+
   const watchHandle = useCallback(async (handle: FileSystemFileHandle) => {
     setSelected(null);
+    setDemoSelected(null);
     setWatchedHandle(handle);
     const file = await handle.getFile();
     lastModified.current = file.lastModified;
@@ -182,6 +195,13 @@ export function App() {
       void openFile(server.files[0]);
     }
   }, [server, selected, watchedHandle, folder, openFile]);
+
+  // No server (hosted mode): show a bundled demo by default
+  useEffect(() => {
+    if (server.checked && !server.connected && !loaded && !watchedHandle && !folder && !demoSelected && demos.length > 0) {
+      openDemo(demos[0].name);
+    }
+  }, [server.checked, server.connected, loaded, watchedHandle, folder, demoSelected, openDemo]);
 
   // Live reload via SSE (local dev server mode)
   useEffect(() => {
@@ -306,27 +326,46 @@ export function App() {
             )}
           </>
         ) : (
-          <div className="offline">
-            <p>
-              Preview <code>.harness.json</code> files from your machine. Files are read in-browser
-              and never uploaded.
-            </p>
-            {canPickFiles && (
-              <button className="open-file" onClick={() => void pickFile()}>
-                Open harness file
-              </button>
+          <>
+            {demos.length > 0 && (
+              <>
+                <div className="data-dir">demos</div>
+                <ul className="file-list">
+                  {demos.map((demo) => (
+                    <li key={demo.name}>
+                      <button
+                        className={demoSelected === demo.name ? "active" : ""}
+                        onClick={() => openDemo(demo.name)}
+                      >
+                        {demo.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
-            {canPickFolder && (
-              <button className="open-file" onClick={() => void pickFolder()}>
-                Open folder
-              </button>
-            )}
-            <p className="offline-hint">
-              {canPickFiles
-                ? "Opened files live-reload as you (or your agent) save them."
-                : "Drop a file anywhere to preview it. For live reload, use Chrome/Edge or run the CLI locally."}
-            </p>
-          </div>
+            <div className="offline">
+              <p>
+                Preview <code>.harness.json</code> files from your machine. Files are read in-browser
+                and never uploaded.
+              </p>
+              {canPickFiles && (
+                <button className="open-file" onClick={() => void pickFile()}>
+                  Open harness file
+                </button>
+              )}
+              {canPickFolder && (
+                <button className="open-file" onClick={() => void pickFolder()}>
+                  Open folder
+                </button>
+              )}
+              <p className="offline-hint">
+                {canPickFiles
+                  ? "Opened files live-reload as you (or your agent) save them."
+                  : "Drop a file anywhere to preview it. For live reload, use Chrome/Edge or run the CLI locally."}
+              </p>
+            </div>
+          </>
         )}
         {watchedHandle && (
           <div className="watching">

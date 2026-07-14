@@ -54,22 +54,24 @@ export function parseHarnessText(sourceName: string, content: string): LoadedHar
 
 export interface ServerState {
   connected: boolean;
+  /** true once the initial /api/files probe has resolved either way */
+  checked: boolean;
   dataDir?: string;
   files: string[];
 }
 
 export function useHarnessServer() {
-  const [server, setServer] = useState<ServerState>({ connected: false, files: [] });
+  const [server, setServer] = useState<ServerState>({ connected: false, checked: false, files: [] });
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/files");
       if (!res.ok) throw new Error();
       const body = (await res.json()) as { dataDir: string; files: string[] };
-      setServer({ connected: true, dataDir: body.dataDir, files: body.files });
+      setServer({ connected: true, checked: true, dataDir: body.dataDir, files: body.files });
       return body.files;
     } catch {
-      setServer({ connected: false, files: [] });
+      setServer({ connected: false, checked: true, files: [] });
       return [];
     }
   }, []);

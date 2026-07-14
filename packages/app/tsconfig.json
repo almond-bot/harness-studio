@@ -11,6 +11,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
     "paths": {
       "@almond-harness-studio/core": ["../core/src/index.ts"]
     }
