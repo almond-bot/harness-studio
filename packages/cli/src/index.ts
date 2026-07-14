@@ -19,11 +19,14 @@ import {
 import { createApiHandler } from "./middleware.js";
 import { CONFIG_PATH, loadConfig, resolvePart, saveConfigValue } from "./vendors.js";
 
+const require = createRequire(import.meta.url);
+const { version: cliVersion } = require("../package.json") as { version: string };
+
 const program = new Command();
 program
   .name("almond-harness-studio")
   .description("Wire harness drawings from JSON: live preview, validation, and PDF export")
-  .version("0.1.0");
+  .version(cliVersion);
 
 function loadAndValidate(file: string, raw: string): { harness?: Harness; ok: boolean } {
   let data: unknown;
@@ -273,7 +276,6 @@ const MIME: Record<string, string> = {
 
 function findAppDist(): string | null {
   try {
-    const require = createRequire(import.meta.url);
     const appPkg = require.resolve("@almond-bot/harness-studio-app/package.json");
     return path.join(path.dirname(appPkg), "dist");
   } catch {
