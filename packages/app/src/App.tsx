@@ -555,6 +555,18 @@ export function App() {
                   Open folder
                 </button>
               )}
+              {!server.connected && (
+                <p className="get-started">
+                  New here?{" "}
+                  <a
+                    href="https://github.com/almond-bot/harness-studio"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Get started
+                  </a>
+                </p>
+              )}
             </div>
           )
         )}
