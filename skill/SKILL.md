@@ -107,4 +107,5 @@ Key rules:
 - Prefer LCSC part numbers when the user has no vendor preference — lookups need no API key.
 - Put manufacturing requirements in `notes` in uppercase (tolerance, workmanship spec, twist lay, label requirements).
 - Use `wireGroups` with `twisted: true` for differential/CAN/I2C pairs.
+- When assembly orientation matters (wires must bend a specific direction relative to an asymmetric connector, e.g. a right-angle or PCB-soldered part), add `face` to that connector: transcribe the pin pattern positions from the part's datasheet and set `wireBend`. This renders an ASSEMBLY DETAIL card (product photo + pin-pattern face view with wire colors + bend arrow) that the operator assembles from. See [reference.md](reference.md) for the fields.
 - For full field-by-field documentation, see [reference.md](reference.md). For complete worked examples, see [examples/](examples/).

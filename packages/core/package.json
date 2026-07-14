@@ -1,6 +1,6 @@
 {
-  "name": "@almond-harness-studio/core",
-  "version": "0.1.0",
+  "name": "@almond-bot/harness-studio-core",
+  "version": "0.1.1",
   "description": "Schema, validation, layout, and SVG rendering for almond-harness-studio wire harness drawings",
   "license": "MIT",
   "type": "module",

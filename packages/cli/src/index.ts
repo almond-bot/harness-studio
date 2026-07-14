@@ -15,7 +15,7 @@ import {
   buildWireList,
   type Harness,
   type PartsCache,
-} from "@almond-harness-studio/core";
+} from "@almond-bot/harness-studio-core";
 import { createApiHandler } from "./middleware.js";
 import { CONFIG_PATH, loadConfig, resolvePart, saveConfigValue } from "./vendors.js";
 
@@ -274,7 +274,7 @@ const MIME: Record<string, string> = {
 function findAppDist(): string | null {
   try {
     const require = createRequire(import.meta.url);
-    const appPkg = require.resolve("@almond-harness-studio/app/package.json");
+    const appPkg = require.resolve("@almond-bot/harness-studio-app/package.json");
     return path.join(path.dirname(appPkg), "dist");
   } catch {
     return null;

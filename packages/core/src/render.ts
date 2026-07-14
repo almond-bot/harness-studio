@@ -1,4 +1,5 @@
 import type {
+  ConnectorNode,
   Harness,
   InlineComponentNode,
   PartsCache,
@@ -155,6 +156,32 @@ function fitText(value: string, widthPx: number, fontSize: number): string {
   const maxChars = Math.floor((widthPx - 10) / (fontSize * 0.56));
   if (value.length <= maxChars) return value;
   return value.slice(0, Math.max(1, maxChars - 1)).trimEnd() + "…";
+}
+
+/** Word-wrap to fit a pixel width; words longer than a line are hard-broken. */
+function wrapText(value: string, widthPx: number, fontSize: number): string[] {
+  const maxChars = Math.max(8, Math.floor(widthPx / (fontSize * 0.56)));
+  const lines: string[] = [];
+  let current = "";
+  for (const word of value.split(/\s+/)) {
+    let w = word;
+    while (w.length > maxChars) {
+      if (current) {
+        lines.push(current);
+        current = "";
+      }
+      lines.push(w.slice(0, maxChars));
+      w = w.slice(maxChars);
+    }
+    if (!current) current = w;
+    else if (current.length + 1 + w.length <= maxChars) current += " " + w;
+    else {
+      lines.push(current);
+      current = w;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [""];
 }
 
 interface Column {
@@ -435,6 +462,168 @@ function renderPartsGallery(
   }
   const rows = Math.ceil(i / perRow);
   return { svg: parts.join("\n"), height: rows * (cardH + gap) };
+}
+
+/**
+ * Assembly detail card for a connector: the product photo plus an authored
+ * face view of the real pin pattern, each cavity filled in its wire color,
+ * with an arrow showing which way the wires bend in that view's frame — the
+ * references an operator needs to orient the part in hand.
+ */
+function renderFaceDetails(
+  harness: Harness,
+  partsCache: PartsCache,
+  x: number,
+  y: number,
+  maxW: number
+): { svg: string; height: number } {
+  const detailed = harness.nodes.filter(
+    (n): n is ConnectorNode => n.kind === "connector" && n.face !== undefined
+  );
+  if (detailed.length === 0) return { svg: "", height: 0 };
+
+  const cardH = 150;
+  const gap = 10;
+  const parts: string[] = [];
+  let cx = x;
+  let cy = y;
+
+  const wireAt = (nodeId: string, pinId: string) =>
+    harness.wires.find((w) => w.from === `${nodeId}.${pinId}` || w.to === `${nodeId}.${pinId}`);
+
+  for (const node of detailed) {
+    const face = node.face!;
+    const resolved = resolvedFor(node, partsCache);
+    const hasPhoto = Boolean(resolved?.image);
+    const faceSlot = 150;
+    const cardW = 16 + (hasPhoto ? 74 : 0) + faceSlot;
+    if (cx > x && cx + cardW > x + maxW) {
+      cx = x;
+      cy += cardH + gap;
+    }
+
+    parts.push(
+      `<rect x="${fmt(cx)}" y="${fmt(cy)}" width="${cardW}" height="${cardH}" fill="${T.paper}" stroke="${T.cardStroke}" stroke-width="0.75"/>`
+    );
+    parts.push(text(cx + 6, cy + 13, `ASSEMBLY DETAIL — ${node.id}`, { size: 8, weight: "bold" }));
+
+    // Caption states the requirement in words; the diagram shows it
+    if (face.wireBend) {
+      parts.push(
+        text(cx + 6, cy + 24, fitText(`WIRES BEND ${face.wireBend.toUpperCase()} IN THIS VIEW`, cardW - 12, 5.5), {
+          size: 5.5,
+          fill: T.textSoft,
+        })
+      );
+    }
+
+    let px0 = cx + 8;
+
+    // Product photo panel: the real part the assembler orients against
+    if (resolved?.image) {
+      parts.push(
+        `<rect x="${fmt(px0)}" y="${fmt(cy + 30)}" width="64" height="78" fill="${T.paper}" stroke="${T.cardStroke}" stroke-width="0.75"/>`,
+        `<image x="${fmt(px0 + 4)}" y="${fmt(cy + 34)}" width="56" height="56" href="${resolved.image}" preserveAspectRatio="xMidYMid meet"/>`,
+        text(px0 + 32, cy + 102, fitText(resolved.mpn, 60, 6), { size: 6, anchor: "middle", fill: T.textSoft })
+      );
+      px0 += 74;
+    }
+
+    // Face view: the authored pin pattern (the operator's orientation
+    // reference), each cavity filled with its wire color, and the bend
+    // direction drawn in this view's frame
+    {
+      const bend = face.wireBend;
+      const minX = Math.min(...face.pins.map((p) => p.x));
+      const maxX = Math.max(...face.pins.map((p) => p.x));
+      const minY = Math.min(...face.pins.map((p) => p.y));
+      const maxY = Math.max(...face.pins.map((p) => p.y));
+      const scale = Math.min(
+        60 / Math.max(maxX - minX, 1e-6),
+        44 / Math.max(maxY - minY, 1e-6),
+        30
+      );
+      const cmx = px0 + faceSlot / 2;
+      const cmy = cy + 74 + (bend === "up" ? 8 : bend === "down" ? -8 : 0);
+      const pos = face.pins.map((fp) => ({
+        fp,
+        r: 5.5 * (fp.size ?? 1),
+        px: cmx + (fp.x - (minX + maxX) / 2) * scale,
+        py: cmy - (fp.y - (minY + maxY) / 2) * scale,
+      }));
+
+      // Connector body outline around the pin pattern
+      const fbx0 = Math.min(...pos.map((m) => m.px - m.r)) - 8;
+      const fbx1 = Math.max(...pos.map((m) => m.px + m.r)) + 8;
+      const fby0 = Math.min(...pos.map((m) => m.py - m.r)) - 8;
+      const fby1 = Math.max(...pos.map((m) => m.py + m.r)) + 8;
+      parts.push(
+        `<rect x="${fmt(fbx0)}" y="${fmt(fby0)}" width="${fmt(fbx1 - fbx0)}" height="${fmt(fby1 - fby0)}" rx="4" fill="${T.panelSoft}" stroke="${T.ink}" stroke-width="1"/>`
+      );
+
+      for (const { fp, r, px, py } of pos) {
+        const wire = wireAt(node.id, fp.pin);
+        const color = wire ? parseWireColor(wire.color) : undefined;
+        const fill = color ? color.base : T.panel;
+        const stroke = color && T.outlinedWires.includes(color.base) ? T.wireOutline : T.ink;
+        parts.push(
+          `<circle cx="${fmt(px)}" cy="${fmt(py)}" r="${fmt(r)}" fill="${fill}" stroke="${stroke}" stroke-width="1"/>`
+        );
+        if (color?.stripe) {
+          parts.push(
+            `<line x1="${fmt(px - r * 0.62)}" y1="${fmt(py)}" x2="${fmt(px + r * 0.62)}" y2="${fmt(py)}" stroke="${color.stripe}" stroke-width="${fmt(Math.max(1.8, r * 0.34))}"/>`
+          );
+        }
+        parts.push(text(px, py + r + 7, fp.pin, { size: 5, anchor: "middle" }));
+      }
+
+      // Bend arrow: bold, outside the body, in this view's frame
+      if (bend) {
+        const bmx = (fbx0 + fbx1) / 2;
+        const bmy = (fby0 + fby1) / 2;
+        const dirs = {
+          up: { x0: bmx, y0: fby0 - 4, dx: 0, dy: -1 },
+          down: { x0: bmx, y0: fby1 + 4, dx: 0, dy: 1 },
+          left: { x0: fbx0 - 4, y0: bmy, dx: -1, dy: 0 },
+          right: { x0: fbx1 + 4, y0: bmy, dx: 1, dy: 0 },
+        } as const;
+        const d = dirs[bend];
+        const ex = d.x0 + d.dx * 16;
+        const ey = d.y0 + d.dy * 16;
+        parts.push(
+          `<line x1="${fmt(d.x0)}" y1="${fmt(d.y0)}" x2="${fmt(ex)}" y2="${fmt(ey)}" stroke="${T.cableJacket}" stroke-width="4" stroke-linecap="round"/>`,
+          `<polygon points="${fmt(ex + d.dx * 8)},${fmt(ey + d.dy * 8)} ${fmt(ex - d.dy * 5)},${fmt(ey + d.dx * 5)} ${fmt(ex + d.dy * 5)},${fmt(ey - d.dx * 5)}" fill="${T.cableJacket}"/>`
+        );
+        if (bend === "up" || bend === "down") {
+          parts.push(text(bmx + 9, (d.y0 + ey) / 2 + 2, "WIRE BEND", { size: 5, fill: T.textSoft }));
+        } else {
+          parts.push(text((d.x0 + ex) / 2, bmy - 9, "WIRE BEND", { size: 5, anchor: "middle", fill: T.textSoft }));
+        }
+      }
+
+      parts.push(
+        text(cmx, cy + cardH - 18, `VIEW FROM ${face.view === "mating-side" ? "MATING SIDE" : "WIRE SIDE"}`, {
+          size: 5,
+          anchor: "middle",
+          fill: T.textDim,
+        })
+      );
+    }
+
+    if (face.note) {
+      parts.push(
+        text(cx + cardW / 2, cy + cardH - 7, fitText(face.note, cardW - 10, 5.5), {
+          size: 5.5,
+          anchor: "middle",
+          fill: T.textSoft,
+        })
+      );
+    }
+
+    cx += cardW + gap;
+  }
+
+  return { svg: parts.join("\n"), height: cy - y + cardH + gap };
 }
 
 function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache): string {
@@ -1002,15 +1191,26 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
     )
   );
 
-  // Notes: between wire list and title block
+  // Notes: between wire list and title block, word-wrapped so they never
+  // spill into the title block or past the frame
   const notes = harness.notes ?? [];
+  let notesH = 0;
   if (notes.length > 0) {
     const nX = wlX + wlW + 24;
-    let nY = frame.y + frame.h - 10 - notes.length * 13 - 16;
+    const noteSize = 9;
+    const noteW = tbX - 16 - nX;
+    const wrapped = notes.map((note, i) => wrapText(`${i + 1}. ${note}`, noteW, noteSize));
+    const totalLines = wrapped.reduce((sum, lines) => sum + lines.length, 0);
+    const nY = frame.y + frame.h - 10 - totalLines * 13 - 16;
+    notesH = frame.y + frame.h - nY;
     parts.push(text(nX, nY, "NOTES:", { size: 10, weight: "bold" }));
-    notes.forEach((note, i) => {
-      parts.push(text(nX, nY + 15 + i * 13, `${i + 1}. ${note}`, { size: 9 }));
-    });
+    let lineIdx = 0;
+    for (const lines of wrapped) {
+      lines.forEach((line, j) => {
+        parts.push(text(nX + (j > 0 ? 12 : 0), nY + 15 + lineIdx * 13, line, { size: noteSize }));
+        lineIdx++;
+      });
+    }
   }
 
   // Parts gallery: pictorial views in the top-left, clear of the schematic
@@ -1023,14 +1223,25 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
   );
   parts.push(gallery.svg);
 
+  // Assembly details: connector face views below the gallery
+  const faceDetails = renderFaceDetails(
+    harness,
+    partsCache,
+    frame.x + 10,
+    frame.y + 10 + gallery.height,
+    bomX - frame.x - 40
+  );
+  parts.push(faceDetails.svg);
+  const topBand = gallery.height + faceDetails.height;
+
   // Drawing area: center on the sheet (below the gallery, above the bottom
   // band); if the drawing would collide with the BOM in the top-right, fall
   // back to the region left of it.
-  const bottomBand = Math.max(wlH, tbH) + 24;
+  const bottomBand = Math.max(wlH, tbH, notesH) + 24;
   const b = { ...layout.bounds };
   const pad = 30;
-  const availY = frame.y + 20 + gallery.height;
-  const availH = frame.h - bottomBand - 40 - gallery.height;
+  const availY = frame.y + 20 + topBand;
+  const availH = frame.h - bottomBand - 40 - topBand;
   let scale = Math.min((frame.w - 40) / (b.width + pad * 2), availH / (b.height + pad * 2), 1.25);
   let tx = frame.x + (frame.w - b.width * scale) / 2 - b.x * scale;
   let ty = availY + (availH - b.height * scale) / 2 - b.y * scale;

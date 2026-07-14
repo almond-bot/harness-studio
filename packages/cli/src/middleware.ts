@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { collectPartRefs, partKey, type Harness, type PartsCache } from "@almond-harness-studio/core";
+import { collectPartRefs, partKey, type Harness, type PartsCache } from "@almond-bot/harness-studio-core";
 import { loadConfig, resolvePart, type VendorConfig } from "./vendors.js";
 
 type Next = () => void;

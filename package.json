@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @almond-harness-studio/core -w @almond-harness-studio/app -w almond-harness-studio",
-    "dev": "npm run dev -w @almond-harness-studio/app",
+    "build": "npm run build -w @almond-bot/harness-studio-core -w @almond-bot/harness-studio-app -w almond-harness-studio",
+    "dev": "npm run dev -w @almond-bot/harness-studio-app",
     "check:examples": "node packages/cli/dist/index.js validate examples/*.harness.json skill/examples/*.harness.json",
     "typecheck": "tsc -b packages/core packages/cli && tsc --noEmit -p packages/app"
   },

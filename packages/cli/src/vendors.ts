@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { PartRef, ResolvedPart } from "@almond-harness-studio/core";
+import type { PartRef, ResolvedPart } from "@almond-bot/harness-studio-core";
 
 /**
  * Distributor API clients. Parts are always sourced from a real vendor:
