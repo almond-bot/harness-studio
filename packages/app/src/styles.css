@@ -544,17 +544,20 @@ button {
   background: rgba(239, 244, 131, 0.85);
 }
 
-.placeholder .get-started {
-  margin-top: 18px;
+.get-started {
   color: rgba(255, 255, 255, 0.35);
   font-size: 13px;
 }
 
-.placeholder .get-started a {
+.placeholder .get-started {
+  margin-top: 18px;
+}
+
+.get-started a {
   color: var(--primary);
   text-decoration: none;
 }
 
-.placeholder .get-started a:hover {
+.get-started a:hover {
   text-decoration: underline;
 }
