@@ -70,8 +70,16 @@ interface Column {
 const TABLE_ROW_H = 16;
 const TABLE_HEADER_H = 18;
 
+/** Single line weights used by every table-like element so linework is uniform. */
+const BORDER_W = 1.25;
+const GRID_W = 0.5;
+
 function tableHeight(rowCount: number, title?: string): number {
   return (title ? 16 : 0) + TABLE_HEADER_H + rowCount * TABLE_ROW_H;
+}
+
+function gridLine(x1: number, y1: number, x2: number, y2: number): string {
+  return `<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="#111" stroke-width="${GRID_W}"/>`;
 }
 
 function renderTable(x: number, y: number, columns: Column[], rows: string[][], title?: string): string {
@@ -83,30 +91,31 @@ function renderTable(x: number, y: number, columns: Column[], rows: string[][], 
     top += 16;
   }
   const height = TABLE_HEADER_H + rows.length * TABLE_ROW_H;
-  parts.push(
-    `<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="white" stroke="#111" stroke-width="1"/>`
-  );
-  parts.push(
-    `<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${TABLE_HEADER_H}" fill="#ececec" stroke="#111" stroke-width="1"/>`
-  );
+
+  // Fills first, then a single pass of uniform grid lines — nothing overlaps
+  parts.push(`<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="white"/>`);
+  parts.push(`<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${TABLE_HEADER_H}" fill="#ececec"/>`);
+
+  parts.push(gridLine(x, top + TABLE_HEADER_H, x + width, top + TABLE_HEADER_H));
+  rows.forEach((_, r) => {
+    if (r > 0) {
+      const ry = top + TABLE_HEADER_H + r * TABLE_ROW_H;
+      parts.push(gridLine(x, ry, x + width, ry));
+    }
+  });
   let cx = x;
   columns.forEach((col, i) => {
+    if (i > 0) parts.push(gridLine(cx, top, cx, top + height));
     const alignX = col.align === "end" ? cx + col.width - 5 : col.align === "middle" ? cx + col.width / 2 : cx + 5;
     parts.push(text(alignX, top + 12.5, col.title, { size: 8.5, weight: "bold", anchor: col.align ?? "start" }));
-    if (i > 0) {
-      parts.push(
-        `<line x1="${fmt(cx)}" y1="${fmt(top)}" x2="${fmt(cx)}" y2="${fmt(top + height)}" stroke="#111" stroke-width="0.75"/>`
-      );
-    }
     cx += col.width;
   });
+  parts.push(
+    `<rect x="${fmt(x)}" y="${fmt(top)}" width="${width}" height="${height}" fill="none" stroke="#111" stroke-width="${BORDER_W}"/>`
+  );
+
   rows.forEach((row, r) => {
     const ry = top + TABLE_HEADER_H + r * TABLE_ROW_H;
-    if (r > 0) {
-      parts.push(
-        `<line x1="${fmt(x)}" y1="${fmt(ry)}" x2="${fmt(x + width)}" y2="${fmt(ry)}" stroke="#111" stroke-width="0.5"/>`
-      );
-    }
     let cellX = x;
     columns.forEach((col, c) => {
       const value = fitText(row[c] ?? "", col.width, 8.5);
@@ -337,28 +346,36 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
   const parts: string[] = [];
   if (node.kind === "connector") {
     const resolved = resolvedFor(node, partsCache);
+    const pinCellW = 24;
+    const pinCellX = box.facesRight ? box.x + box.width - pinCellW : box.x;
+    const pinsTop = box.y + CONNECTOR_HEADER;
+
+    // Fills first, then each divider once, then the outer border
+    parts.push(`<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="white"/>`);
     parts.push(
-      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="white" stroke="#111" stroke-width="1.5"/>`
+      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${CONNECTOR_HEADER}" fill="#f0f0f0"/>`
     );
     parts.push(
-      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${CONNECTOR_HEADER}" fill="#f0f0f0" stroke="#111" stroke-width="1.5"/>`
+      `<rect x="${fmt(pinCellX)}" y="${fmt(pinsTop)}" width="${pinCellW}" height="${fmt(box.height - CONNECTOR_HEADER)}" fill="#fafafa"/>`
     );
+    parts.push(gridLine(box.x, pinsTop, box.x + box.width, pinsTop));
+    node.pins.forEach((_, i) => {
+      if (i > 0) {
+        const rowY = pinsTop + i * PIN_ROW;
+        parts.push(gridLine(box.x, rowY, box.x + box.width, rowY));
+      }
+    });
+    const cellDividerX = box.facesRight ? pinCellX : pinCellX + pinCellW;
+    parts.push(gridLine(cellDividerX, pinsTop, cellDividerX, box.y + box.height));
+    parts.push(
+      `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="none" stroke="#111" stroke-width="${BORDER_W}"/>`
+    );
+
     parts.push(text(box.x + 6, box.y + 14, node.id, { size: 11, weight: "bold" }));
     const sub = resolved?.mpn ?? `${node.part.vendor.toUpperCase()} ${node.part.number}`;
     parts.push(text(box.x + 6, box.y + 27, sub, { size: 8, fill: "#333" }));
-
-    const pinCellW = 24;
-    const pinCellX = box.facesRight ? box.x + box.width - pinCellW : box.x;
     node.pins.forEach((pin, i) => {
-      const rowY = box.y + CONNECTOR_HEADER + i * PIN_ROW;
-      if (i > 0) {
-        parts.push(
-          `<line x1="${fmt(box.x)}" y1="${fmt(rowY)}" x2="${fmt(box.x + box.width)}" y2="${fmt(rowY)}" stroke="#111" stroke-width="0.5"/>`
-        );
-      }
-      parts.push(
-        `<rect x="${fmt(pinCellX)}" y="${fmt(rowY)}" width="${pinCellW}" height="${PIN_ROW}" fill="#fafafa" stroke="#111" stroke-width="0.5"/>`
-      );
+      const rowY = pinsTop + i * PIN_ROW;
       parts.push(text(pinCellX + pinCellW / 2, rowY + 12.5, pin.id, { size: 9, weight: "bold", anchor: "middle" }));
       if (pin.label) {
         const labelX = box.facesRight ? box.x + 6 : box.x + pinCellW + 6;
@@ -751,26 +768,35 @@ function renderTitleBlock(x: number, y: number, w: number, h: number, harness: H
   const parts: string[] = [];
   const row1 = h * 0.42;
   const row2 = (h - row1) / 2;
-  parts.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="white" stroke="#111" stroke-width="1.5"/>`);
-
-  const field = (fx: number, fy: number, fw: number, fh: number, caption: string, value: string, valueSize = 10) => {
-    parts.push(`<rect x="${fmt(fx)}" y="${fmt(fy)}" width="${fmt(fw)}" height="${fmt(fh)}" fill="none" stroke="#111" stroke-width="0.75"/>`);
-    parts.push(text(fx + 4, fy + 9, caption, { size: 6, fill: "#666" }));
-    parts.push(text(fx + 4, fy + fh - 5, value, { size: valueSize, weight: "bold" }));
-  };
-
-  field(x, y, w, row1, "TITLE", meta.title, 13);
   const c1 = w * 0.42;
   const c2 = w * 0.18;
   const c3 = w * 0.2;
   const c4 = w - c1 - c2 - c3;
-  field(x, y + row1, c1, row2, "PART NUMBER", meta.partNumber ?? "—");
-  field(x + c1, y + row1, c2, row2, "REV", meta.rev ?? "—");
-  field(x + c1 + c2, y + row1, c3, row2, "DATE", meta.date ?? "—");
-  field(x + c1 + c2 + c3, y + row1, c4, row2, "SCALE", "NTS");
-  field(x, y + row1 + row2, c1, row2, "COMPANY", meta.company ?? "—");
-  field(x + c1, y + row1 + row2, c2 + c3, row2, "DRAWN BY", meta.drawnBy ?? "—");
-  field(x + c1 + c2 + c3, y + row1 + row2, c4, row2, "SHEET", sheet);
+
+  // Fill, then each divider exactly once, then the outer border
+  parts.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="white"/>`);
+  parts.push(gridLine(x, y + row1, x + w, y + row1));
+  parts.push(gridLine(x, y + row1 + row2, x + w, y + row1 + row2));
+  parts.push(gridLine(x + c1, y + row1, x + c1, y + h));
+  parts.push(gridLine(x + c1 + c2, y + row1, x + c1 + c2, y + row1 + row2));
+  parts.push(gridLine(x + c1 + c2 + c3, y + row1, x + c1 + c2 + c3, y + h));
+  parts.push(
+    `<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="none" stroke="#111" stroke-width="${BORDER_W}"/>`
+  );
+
+  const field = (fx: number, fy: number, fh: number, caption: string, value: string, valueSize = 10) => {
+    parts.push(text(fx + 4, fy + 9, caption, { size: 6, fill: "#666" }));
+    parts.push(text(fx + 4, fy + fh - 5, value, { size: valueSize, weight: "bold" }));
+  };
+
+  field(x, y, row1, "TITLE", meta.title, 13);
+  field(x, y + row1, row2, "PART NUMBER", meta.partNumber ?? "—");
+  field(x + c1, y + row1, row2, "REV", meta.rev ?? "—");
+  field(x + c1 + c2, y + row1, row2, "DATE", meta.date ?? "—");
+  field(x + c1 + c2 + c3, y + row1, row2, "SCALE", "NTS");
+  field(x, y + row1 + row2, row2, "COMPANY", meta.company ?? "—");
+  field(x + c1, y + row1 + row2, row2, "DRAWN BY", meta.drawnBy ?? "—");
+  field(x + c1 + c2 + c3, y + row1 + row2, row2, "SHEET", sheet);
   return parts.join("\n");
 }
 
