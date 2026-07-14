@@ -585,7 +585,7 @@ function computeGroupRuns(harness: Harness, layout: LayoutResult): GroupRun[] {
     for (const segId of shared) {
       const ends = paths.map((p) => {
         const idx = p!.routeSegments.indexOf(segId);
-        return { a: p!.points[1 + 2 * idx], b: p!.points[2 + 2 * idx] };
+        return { a: p!.points[p!.leadIn + 2 * idx], b: p!.points[p!.leadIn + 1 + 2 * idx] };
       });
       // Orient every wire's traversal the same way as the first one
       const ref = ends[0];
@@ -653,9 +653,13 @@ function renderWires(harness: Harness, layout: LayoutResult, groupRuns: GroupRun
       const run = runByWire.get(wire.id);
       const pieces: PathPiece[] = [];
       let cur = path.points[0];
+      for (let p = 1; p < path.leadIn; p++) {
+        pieces.push({ kind: "line", from: cur, to: path.points[p], phase: 0 });
+        cur = path.points[p];
+      }
       path.routeSegments.forEach((segId, i) => {
-        let entry = path.points[1 + 2 * i];
-        let exit = path.points[2 + 2 * i];
+        let entry = path.points[path.leadIn + 2 * i];
+        let exit = path.points[path.leadIn + 1 + 2 * i];
         const axis = run?.axes.get(segId);
         if (axis) {
           // Weave around the group centerline instead of the parallel offset
@@ -674,8 +678,12 @@ function renderWires(harness: Harness, layout: LayoutResult, groupRuns: GroupRun
         });
         cur = exit;
       });
-      const last = path.points[path.points.length - 1];
-      if (last.x !== cur.x || last.y !== cur.y) pieces.push({ kind: "line", from: cur, to: last, phase: 0 });
+      for (let p = path.leadIn + 2 * path.routeSegments.length; p < path.points.length; p++) {
+        const pt = path.points[p];
+        if (pt.x === cur.x && pt.y === cur.y) continue;
+        pieces.push({ kind: "line", from: cur, to: pt, phase: 0 });
+        cur = pt;
+      }
       d = buildWireD(pieces);
     }
     const light = color.base === "#f2f2f2" || color.base === "#e6c700";

@@ -31,6 +31,8 @@ export interface WirePath {
   wireId: string;
   points: Point[];
   routeSegments: string[];
+  /** Points before the first segment entry (anchor, plus a pin stub if any) */
+  leadIn: number;
 }
 
 export interface LayoutResult {
@@ -45,6 +47,8 @@ export const CONNECTOR_HEADER = 34;
 export const PIN_ROW = 18;
 const H_GAP = 210;
 const V_GAP = 44;
+/** Clear fan-out zone between a connector edge and the start of the bundle */
+const FANOUT = 26;
 
 function nodeSize(node: HarnessNode): { width: number; height: number } {
   switch (node.kind) {
@@ -190,7 +194,10 @@ export function layoutHarness(harness: Harness): LayoutResult {
     });
     const idx = sorted.indexOf(seg);
     const y = box.y + (box.height * (idx + 1)) / (sorted.length + 1);
-    return { x: rightSide ? box.x + box.width : box.x, y };
+    // Bundles start a short distance off connectors so each wire visibly
+    // fans out from its own pin row before joining the bundle
+    const gap = box.node.kind === "connector" ? FANOUT : 0;
+    return { x: rightSide ? box.x + box.width + gap : box.x - gap, y };
   };
 
   const segmentLines = new Map<string, SegmentLine>();
@@ -217,22 +224,29 @@ export function layoutHarness(harness: Harness): LayoutResult {
     const route = wireRoutes.get(wire.id) ?? [];
     const points: Point[] = [];
 
-    const endpointAnchor = (ref: string, otherRef: string): Point => {
+    const endpointAnchor = (ref: string, otherRef: string): Point[] => {
       const { nodeId, pinId } = parseEndpoint(ref);
       const box = boxes.get(nodeId)!;
-      if (pinId && box.pinAnchors.has(pinId)) return box.pinAnchors.get(pinId)!;
+      if (pinId && box.pinAnchors.has(pinId)) {
+        // Straight horizontal exit from the pin row keeps the pin-to-wire
+        // mapping readable before the wire bends toward the bundle
+        const anchor = box.pinAnchors.get(pinId)!;
+        const stubX = box.facesRight ? anchor.x + FANOUT / 2 : anchor.x - FANOUT / 2;
+        return [anchor, { x: stubX, y: anchor.y }];
+      }
       if (box.node.kind === "diode" || box.node.kind === "resistor") {
         // Two-lead device: each wire attaches on the side facing its far end
         const other = boxes.get(parseEndpoint(otherRef).nodeId);
         const rightSide = other
           ? other.x + other.width / 2 >= box.x + box.width / 2
           : !box.facesRight;
-        return { x: rightSide ? box.x + box.width : box.x, y: box.y + box.height / 2 };
+        return [{ x: rightSide ? box.x + box.width : box.x, y: box.y + box.height / 2 }];
       }
-      return { x: box.facesRight ? box.x + box.width : box.x, y: box.y + box.height / 2 };
+      return [{ x: box.facesRight ? box.x + box.width : box.x, y: box.y + box.height / 2 }];
     };
 
-    points.push(endpointAnchor(wire.from, wire.to));
+    const lead = endpointAnchor(wire.from, wire.to);
+    points.push(...lead);
     let currentNode = parseEndpoint(wire.from).nodeId;
     for (const segId of route) {
       const line = segmentLines.get(segId)!;
@@ -252,8 +266,8 @@ export function layoutHarness(harness: Harness): LayoutResult {
       points.push({ x: b.x + ox, y: b.y + oy });
       currentNode = nearFirst ? seg.to : seg.from;
     }
-    points.push(endpointAnchor(wire.to, wire.from));
-    wirePaths.set(wire.id, { wireId: wire.id, points, routeSegments: route });
+    points.push(...endpointAnchor(wire.to, wire.from).reverse());
+    wirePaths.set(wire.id, { wireId: wire.id, points, routeSegments: route, leadIn: lead.length });
   }
 
   let minX = Infinity;
