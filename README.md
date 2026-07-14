@@ -89,6 +89,15 @@ The viewer is a static SPA — deploy `packages/app/dist` to any static host (Ve
 
 The local CLI (`dev`) remains the full experience: a whole folder in the sidebar plus push-based reload.
 
+### Deploying to Vercel
+
+The repo ships a `vercel.json` (build: `npm run build`, output: `packages/app/dist`), so hosting is one step:
+
+- **Git integration**: import the GitHub repo at vercel.com/new and deploy — every push then auto-deploys, with preview URLs per branch
+- **CLI**: `npx vercel` for a preview, `npx vercel --prod` for production
+
+No environment variables or serverless functions are needed — the viewer is fully static, and distributor API keys stay in each visitor's browser.
+
 ## Repo layout
 
 | Path | What |
