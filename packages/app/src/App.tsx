@@ -10,6 +10,12 @@ import {
 import { downloadPdf, downloadSvg, printSheet } from "./exportPdf";
 import { SettingsDialog, loadVendorKeys, type VendorKeys } from "./Settings";
 import { demos } from "./demos";
+import {
+  clearLastOpened,
+  loadLastOpened,
+  saveLastOpened,
+  type LastOpened,
+} from "./lastOpened";
 
 const canPickFiles = typeof window !== "undefined" && !!window.showOpenFilePicker;
 const canPickFolder = typeof window !== "undefined" && !!window.showDirectoryPicker;
@@ -48,7 +54,9 @@ export function App() {
   const [keys, setKeys] = useState<VendorKeys>(() => loadVendorKeys());
   const [fetchingParts, setFetchingParts] = useState(false);
   const [partsError, setPartsError] = useState<string | null>(null);
+  const [resume, setResume] = useState<LastOpened | null>(null);
   const lastModified = useRef(0);
+  const restoreAttempted = useRef(false);
 
   const unresolvedParts = useMemo(() => {
     const harness = loaded?.harness;
@@ -132,7 +140,9 @@ export function App() {
         setFolder(null);
         setFolderFiles([]);
         setFolderSelected(null);
+        setResume(null);
         await watchHandle(handle);
+        void saveLastOpened({ kind: "file", handle });
       }
     } catch {
       // picker dismissed
@@ -151,19 +161,22 @@ export function App() {
   }, []);
 
   const openFolder = useCallback(
-    async (dir: FileSystemDirectoryHandle) => {
+    async (dir: FileSystemDirectoryHandle, preferredFile?: string) => {
       const files = await scanFolder(dir);
       setFolder(dir);
       setFolderFiles(files);
       setSelected(null);
-      if (files.length > 0) {
-        setFolderSelected(files[0].name);
-        await watchHandle(files[0].handle);
+      setResume(null);
+      const initial = files.find((f) => f.name === preferredFile) ?? files[0];
+      if (initial) {
+        setFolderSelected(initial.name);
+        await watchHandle(initial.handle);
       } else {
         setFolderSelected(null);
         setWatchedHandle(null);
         setLoaded(null);
       }
+      void saveLastOpened({ kind: "directory", handle: dir, fileName: initial?.name });
     },
     [scanFolder, watchHandle]
   );
@@ -176,6 +189,63 @@ export function App() {
       // picker dismissed
     }
   }, [openFolder]);
+
+  const restoreLast = useCallback(
+    async (record: LastOpened): Promise<boolean> => {
+      try {
+        if (record.kind === "directory") {
+          await openFolder(record.handle as FileSystemDirectoryHandle, record.fileName);
+        } else {
+          setResume(null);
+          await watchHandle(record.handle as FileSystemFileHandle);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [openFolder, watchHandle]
+  );
+
+  // On load in hosted mode, restore the last opened file/folder. If the browser
+  // dropped the read permission, surface a "reopen" button instead (permission
+  // requests need a user gesture).
+  const [restoreChecked, setRestoreChecked] = useState(false);
+  useEffect(() => {
+    if (!server.checked || restoreAttempted.current) return;
+    restoreAttempted.current = true;
+    if (server.connected) {
+      setRestoreChecked(true);
+      return;
+    }
+    void (async () => {
+      const record = await loadLastOpened();
+      if (record) {
+        const perm = await record.handle.queryPermission?.({ mode: "read" });
+        if (perm === "granted" && (await restoreLast(record))) {
+          setRestoreChecked(true);
+          return;
+        }
+        setResume(record);
+      }
+      setRestoreChecked(true);
+    })();
+  }, [server.checked, server.connected, restoreLast]);
+
+  const resumeLast = useCallback(async () => {
+    if (!resume) return;
+    try {
+      const perm = resume.handle.requestPermission
+        ? await resume.handle.requestPermission({ mode: "read" })
+        : "granted";
+      if (perm !== "granted") return;
+      if (!(await restoreLast(resume))) throw new Error("restore failed");
+    } catch {
+      // Handle is stale (file moved/deleted); forget it
+      setResume(null);
+      void clearLastOpened();
+    }
+  }, [resume, restoreLast]);
 
   // Keep the folder listing fresh: pick up files the user (or agent) adds/removes
   useEffect(() => {
@@ -201,12 +271,14 @@ export function App() {
     }
   }, [server, selected, watchedHandle, folder, openFile]);
 
-  // No server (hosted mode): show a bundled demo by default
+  // No server (hosted mode): show a bundled demo by default, unless a previous
+  // session is being restored (or waiting on the user to reopen it)
   useEffect(() => {
+    if (!restoreChecked || resume) return;
     if (server.checked && !server.connected && !loaded && !watchedHandle && !folder && !demoSelected && demos.length > 0) {
       openDemo(demos[0].name);
     }
-  }, [server.checked, server.connected, loaded, watchedHandle, folder, demoSelected, openDemo]);
+  }, [restoreChecked, resume, server.checked, server.connected, loaded, watchedHandle, folder, demoSelected, openDemo]);
 
   // Live reload via SSE (local dev server mode)
   useEffect(() => {
@@ -241,7 +313,9 @@ export function App() {
           setFolder(null);
           setFolderFiles([]);
           setFolderSelected(null);
+          setResume(null);
           await watchHandle(handle as FileSystemFileHandle);
+          void saveLastOpened({ kind: "file", handle: handle as FileSystemFileHandle });
           return;
         }
       }
@@ -285,6 +359,7 @@ export function App() {
                     onClick={() => {
                       setFolderSelected(f.name);
                       void watchHandle(f.handle);
+                      void saveLastOpened({ kind: "directory", handle: folder, fileName: f.name });
                     }}
                   >
                     {f.name}
@@ -342,6 +417,11 @@ export function App() {
                 Preview <code>.harness.json</code> files from your machine. Files are read in-browser
                 and never uploaded.
               </p>
+              {resume && (
+                <button className="open-file" onClick={() => void resumeLast()}>
+                  Reopen {resume.kind === "directory" ? `${resume.handle.name}/` : resume.handle.name}
+                </button>
+              )}
               {canPickFiles && (
                 <button className="open-file" onClick={() => void pickFile()}>
                   Open harness file
@@ -460,6 +540,11 @@ export function App() {
                     ? "Open a folder or drop a .harness.json file to get started."
                     : "Drop a .harness.json file here to get started."}
               </p>
+              {!server.connected && resume && (
+                <button className="open-file big" onClick={() => void resumeLast()}>
+                  Reopen {resume.kind === "directory" ? `${resume.handle.name}/` : resume.handle.name}
+                </button>
+              )}
               {!server.connected && canPickFiles && (
                 <button className="open-file big" onClick={() => void pickFile()}>
                   Open harness file

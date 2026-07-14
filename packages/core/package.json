@@ -1,6 +1,6 @@
 {
   "name": "@almond-bot/harness-studio-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Schema, validation, layout, and SVG rendering for almond-harness-studio wire harness drawings",
   "license": "MIT",
   "type": "module",
@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsc -b --watch"
+    "dev": "tsc -b --watch",
+    "prepack": "tsc -b --force && test -f dist/index.js"
   },
   "dependencies": {
     "ajv": "^8.17.1"
