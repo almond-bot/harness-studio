@@ -1,6 +1,6 @@
 {
   "name": "almond-harness-studio",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI for almond-harness-studio: live-preview server, validation, and headless PDF export of wire harness drawings",
   "license": "MIT",
   "type": "module",
@@ -38,8 +38,8 @@
     "postpack": "rm -f ./README.md"
   },
   "dependencies": {
-    "@almond-bot/harness-studio-core": "0.1.2",
-    "@almond-bot/harness-studio-app": "0.1.2",
+    "@almond-bot/harness-studio-core": "0.1.3",
+    "@almond-bot/harness-studio-app": "0.1.3",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
     "pdfkit": "^0.17.1",
