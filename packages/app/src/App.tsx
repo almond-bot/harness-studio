@@ -149,6 +149,16 @@ export function App() {
     }
   }, [openFolder]);
 
+  // Leave folder mode and return to the dev server's file list
+  const closeFolder = useCallback(async () => {
+    setFolder(null);
+    setFolderFiles([]);
+    setFolderSelected(null);
+    setWatchedHandle(null);
+    if (server.files.length > 0) await openFile(server.files[0]);
+    else setLoaded(null);
+  }, [server.files, openFile]);
+
   // Keep the folder listing fresh: pick up files the user (or agent) adds/removes
   useEffect(() => {
     if (!folder) return;
@@ -168,10 +178,10 @@ export function App() {
 
   // Auto-select first file once the server responds
   useEffect(() => {
-    if (server.connected && server.files.length > 0 && !selected && !watchedHandle) {
+    if (server.connected && server.files.length > 0 && !selected && !watchedHandle && !folder) {
       void openFile(server.files[0]);
     }
-  }, [server, selected, watchedHandle, openFile]);
+  }, [server, selected, watchedHandle, folder, openFile]);
 
   // Live reload via SSE (local dev server mode)
   useEffect(() => {
@@ -180,13 +190,13 @@ export function App() {
     source.onmessage = (e) => {
       if (e.data !== "change") return;
       void refresh().then((files) => {
-        if (watchedHandle) return;
+        if (watchedHandle || folder) return;
         if (selected && files.includes(selected)) void openFile(selected);
         else if (files.length > 0) void openFile(files[0]);
       });
     };
     return () => source.close();
-  }, [server.connected, selected, watchedHandle, refresh, openFile]);
+  }, [server.connected, selected, watchedHandle, folder, refresh, openFile]);
 
   const onDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -237,26 +247,7 @@ export function App() {
         <div className="brand">
           <img src="/almond.svg" alt="Almond" /> Almond Harness Studio
         </div>
-        {server.connected ? (
-          <>
-            <div className="data-dir" title={server.dataDir}>
-              {server.dataDir}
-            </div>
-            <ul className="file-list">
-              {server.files.map((file) => (
-                <li key={file}>
-                  <button
-                    className={selected === file ? "active" : ""}
-                    onClick={() => void openFile(file)}
-                  >
-                    {file}
-                  </button>
-                </li>
-              ))}
-              {server.files.length === 0 && <li className="empty">no .harness.json files found</li>}
-            </ul>
-          </>
-        ) : folder ? (
+        {folder ? (
           <>
             <div className="data-dir" title={folder.name}>
               {folder.name}/
@@ -281,7 +272,38 @@ export function App() {
               <button className="open-file" onClick={() => void pickFolder()}>
                 Open another folder…
               </button>
+              {server.connected && (
+                <button className="link-button" onClick={() => void closeFolder()}>
+                  ← back to {server.dataDir?.split("/").pop() ?? "server files"}
+                </button>
+              )}
             </div>
+          </>
+        ) : server.connected ? (
+          <>
+            <div className="data-dir" title={server.dataDir}>
+              {server.dataDir}
+            </div>
+            <ul className="file-list">
+              {server.files.map((file) => (
+                <li key={file}>
+                  <button
+                    className={selected === file ? "active" : ""}
+                    onClick={() => void openFile(file)}
+                  >
+                    {file}
+                  </button>
+                </li>
+              ))}
+              {server.files.length === 0 && <li className="empty">no .harness.json files found</li>}
+            </ul>
+            {canPickFolder && (
+              <div className="offline">
+                <button className="open-file" onClick={() => void pickFolder()}>
+                  Open folder…
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="offline">
