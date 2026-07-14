@@ -44,6 +44,16 @@ function text(x: number, y: number, str: string, opts: TextOpts = {}): string {
   return `<text x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" fill="${fill}">${esc(str)}</text>`;
 }
 
+/** Text with a white halo so labels stay readable over wires without patch rectangles. */
+function haloText(x: number, y: number, str: string, opts: TextOpts = {}): string {
+  const { size = 10, weight = "normal", anchor = "start", fill = "#111" } = opts;
+  const common = `x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}"`;
+  return (
+    `<text ${common} fill="white" stroke="white" stroke-width="3" stroke-linejoin="round">${esc(str)}</text>` +
+    `<text ${common} fill="${fill}">${esc(str)}</text>`
+  );
+}
+
 /** Truncate to fit a column so table cells never spill into their neighbors. */
 function fitText(value: string, widthPx: number, fontSize: number): string {
   const maxChars = Math.floor((widthPx - 10) / (fontSize * 0.56));
@@ -253,26 +263,73 @@ function resolvedFor(node: { part?: { vendor: string; number: string } }, parts:
 }
 
 /**
- * Part photo rendered next to the node symbol, like pictorial views on
- * manufacturing drawings. Root-side nodes get the photo above the box; leaf
- * nodes get it on the outward side so it stays clear of incoming wires.
+ * Parts gallery: framed pictorial views in a dedicated panel, so raster
+ * photos never sit on top of the vector schematic.
  */
-function renderPartPhoto(box: NodeBox, resolved: ResolvedPart | undefined): string {
-  if (!resolved?.image) return "";
-  const size = 64;
-  let x: number;
-  let y: number;
-  if (box.facesRight) {
-    x = box.x + (box.width - size) / 2;
-    y = box.y - size - 14;
-  } else {
-    x = box.x + box.width + 12;
-    y = box.y + box.height / 2 - size / 2;
+function renderPartsGallery(
+  harness: Harness,
+  partsCache: PartsCache,
+  x: number,
+  y: number,
+  maxW: number
+): { svg: string; height: number } {
+  interface Entry {
+    resolved: ResolvedPart;
+    users: string[];
   }
-  return (
-    `<image x="${fmt(x)}" y="${fmt(y)}" width="${size}" height="${size}" href="${resolved.image}" preserveAspectRatio="xMidYMid meet"/>` +
-    `<rect x="${fmt(x)}" y="${fmt(y)}" width="${size}" height="${size}" fill="none" stroke="#ccc" stroke-width="0.75"/>`
-  );
+  const entries = new Map<string, Entry>();
+  const add = (ref: { vendor: string; number: string } | undefined, user: string) => {
+    if (!ref) return;
+    const key = partKey(ref as Parameters<typeof partKey>[0]);
+    const resolved = partsCache[key];
+    if (!resolved?.image) return;
+    const entry = entries.get(key);
+    if (entry) {
+      if (!entry.users.includes(user)) entry.users.push(user);
+    } else {
+      entries.set(key, { resolved, users: [user] });
+    }
+  };
+  for (const node of harness.nodes) {
+    if (node.kind === "connector") {
+      add(node.part, node.id);
+      add(node.contacts, node.id);
+      for (const hw of node.hardware ?? []) add(hw, node.id);
+    } else if (node.kind === "terminal" || node.kind === "splice" || node.kind === "diode" || node.kind === "resistor") {
+      add(node.part, node.id);
+    }
+  }
+  for (const acc of harness.accessories ?? []) add(acc.part, "ACC");
+
+  if (entries.size === 0) return { svg: "", height: 0 };
+
+  const cardW = 74;
+  const cardH = 92;
+  const gap = 10;
+  const perRow = Math.max(1, Math.floor((maxW + gap) / (cardW + gap)));
+  const parts: string[] = [];
+  let i = 0;
+  for (const { resolved, users } of entries.values()) {
+    const cx = x + (i % perRow) * (cardW + gap);
+    const cy = y + Math.floor(i / perRow) * (cardH + gap);
+    parts.push(
+      `<rect x="${fmt(cx)}" y="${fmt(cy)}" width="${cardW}" height="${cardH}" fill="white" stroke="#d0d0d0" stroke-width="0.75"/>`,
+      `<image x="${fmt(cx + 9)}" y="${fmt(cy + 5)}" width="56" height="56" href="${resolved.image}" preserveAspectRatio="xMidYMid meet"/>`,
+      text(cx + cardW / 2, cy + 72, fitText(users.join(" "), cardW - 4, 8), {
+        size: 8,
+        weight: "bold",
+        anchor: "middle",
+      }),
+      text(cx + cardW / 2, cy + 84, fitText(resolved.mpn, cardW - 4, 6.5), {
+        size: 6.5,
+        anchor: "middle",
+        fill: "#555",
+      })
+    );
+    i++;
+  }
+  const rows = Math.ceil(i / perRow);
+  return { svg: parts.join("\n"), height: rows * (cardH + gap) };
 }
 
 function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache): string {
@@ -280,7 +337,6 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
   const parts: string[] = [];
   if (node.kind === "connector") {
     const resolved = resolvedFor(node, partsCache);
-    parts.push(renderPartPhoto(box, resolved));
     parts.push(
       `<rect x="${fmt(box.x)}" y="${fmt(box.y)}" width="${box.width}" height="${box.height}" fill="white" stroke="#111" stroke-width="1.5"/>`
     );
@@ -311,7 +367,6 @@ function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache):
     });
   } else if (node.kind === "terminal") {
     const resolved = resolvedFor(node, partsCache);
-    parts.push(renderPartPhoto(box, resolved));
     parts.push(renderTerminalSymbol(box, resolved));
   } else if (node.kind === "splice") {
     const cx = box.x + box.width / 2;
@@ -378,11 +433,159 @@ function renderSegments(layout: LayoutResult): string {
   return parts.join("\n");
 }
 
-function polylinePath(points: Point[]): string {
-  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${fmt(p.x)} ${fmt(p.y)}`).join(" ");
+// ---------------------------------------------------------------------------
+// Wire path geometry — wires are single continuous vector paths. Twisted
+// groups weave as crossing strands along the run itself; corners are filleted.
+// ---------------------------------------------------------------------------
+
+interface PathPiece {
+  kind: "line" | "wave";
+  from: Point;
+  to: Point;
+  /** wave only: 0 starts up, 1 starts down */
+  phase: number;
 }
 
-function renderWires(harness: Harness, layout: LayoutResult): string {
+/** Weave between two points: alternating quadratic half-waves that end exactly at `to`. */
+function waveCommands(from: Point, to: Point, phase: number): string {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 4) return ` L ${fmt(to.x)} ${fmt(to.y)}`;
+  const halfWave = 9;
+  const n = Math.max(2, Math.round(len / halfWave));
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const amp = 4;
+  let d = "";
+  for (let k = 0; k < n; k++) {
+    const t0 = k / n;
+    const t1 = (k + 1) / n;
+    const midT = (t0 + t1) / 2;
+    const sign = (k + phase) % 2 === 0 ? 1 : -1;
+    const cxp = from.x + dx * midT + px * amp * 2 * sign;
+    const cyp = from.y + dy * midT + py * amp * 2 * sign;
+    const ex = from.x + dx * t1;
+    const ey = from.y + dy * t1;
+    d += ` Q ${fmt(cxp)} ${fmt(cyp)} ${fmt(ex)} ${fmt(ey)}`;
+  }
+  return d;
+}
+
+/** Assemble pieces into one path, filleting corners where two straight lines meet. */
+function buildWireD(pieces: PathPiece[], radius = 7): string {
+  if (pieces.length === 0) return "";
+  let d = `M ${fmt(pieces[0].from.x)} ${fmt(pieces[0].from.y)}`;
+  for (let i = 0; i < pieces.length; i++) {
+    const piece = pieces[i];
+    if (piece.kind === "wave") {
+      d += waveCommands(piece.from, piece.to, piece.phase);
+      continue;
+    }
+    const next = pieces[i + 1];
+    const filletNext =
+      next && next.kind === "line" && next.from.x === piece.to.x && next.from.y === piece.to.y;
+    if (!filletNext) {
+      d += ` L ${fmt(piece.to.x)} ${fmt(piece.to.y)}`;
+      continue;
+    }
+    // Shorten this line and start the next with a quadratic through the corner
+    const len1 = Math.hypot(piece.to.x - piece.from.x, piece.to.y - piece.from.y);
+    const len2 = Math.hypot(next.to.x - next.from.x, next.to.y - next.from.y);
+    const r = Math.min(radius, len1 / 2, len2 / 2);
+    if (r < 0.5) {
+      d += ` L ${fmt(piece.to.x)} ${fmt(piece.to.y)}`;
+      continue;
+    }
+    const inX = piece.to.x - ((piece.to.x - piece.from.x) / len1) * r;
+    const inY = piece.to.y - ((piece.to.y - piece.from.y) / len1) * r;
+    const outX = piece.to.x + ((next.to.x - next.from.x) / len2) * r;
+    const outY = piece.to.y + ((next.to.y - next.from.y) / len2) * r;
+    d += ` L ${fmt(inX)} ${fmt(inY)} Q ${fmt(piece.to.x)} ${fmt(piece.to.y)} ${fmt(outX)} ${fmt(outY)}`;
+    // Rewrite the next piece to start after the fillet
+    pieces[i + 1] = { ...next, from: { x: outX, y: outY } };
+  }
+  return d;
+}
+
+interface GroupRun {
+  group: NonNullable<Harness["wireGroups"]>[number];
+  label: string;
+  /** segment id -> weave axis (mean of the member wires' entry/exit points) */
+  axes: Map<string, { start: Point; end: Point }>;
+  /** segments carrying only this group's wires — where a cable jacket may be drawn */
+  pure: Set<string>;
+  /** wire id -> strand index within the group */
+  strand: Map<string, number>;
+}
+
+/**
+ * For every twisted group (including twisted cables), compute the shared
+ * segments and the centerline axis the strands weave around.
+ */
+function computeGroupRuns(harness: Harness, layout: LayoutResult): GroupRun[] {
+  const runs: GroupRun[] = [];
+  (harness.wireGroups ?? []).forEach((group, i) => {
+    const paths = group.wires.map((w) => layout.wirePaths.get(w)).filter((p) => p !== undefined);
+    if (paths.length !== group.wires.length || paths.length < 2) return;
+    const shared = paths[0]!.routeSegments.filter((segId) =>
+      paths.every((p) => p!.routeSegments.includes(segId))
+    );
+    if (shared.length === 0) return;
+    const axes = new Map<string, { start: Point; end: Point }>();
+    for (const segId of shared) {
+      const ends = paths.map((p) => {
+        const idx = p!.routeSegments.indexOf(segId);
+        return { a: p!.points[1 + 2 * idx], b: p!.points[2 + 2 * idx] };
+      });
+      // Orient every wire's traversal the same way as the first one
+      const ref = ends[0];
+      let sx = 0;
+      let sy = 0;
+      let ex = 0;
+      let ey = 0;
+      for (const { a, b } of ends) {
+        const straight = Math.hypot(a.x - ref.a.x, a.y - ref.a.y) <= Math.hypot(b.x - ref.a.x, b.y - ref.a.y);
+        const s = straight ? a : b;
+        const e = straight ? b : a;
+        sx += s.x;
+        sy += s.y;
+        ex += e.x;
+        ey += e.y;
+      }
+      axes.set(segId, {
+        start: { x: sx / ends.length, y: sy / ends.length },
+        end: { x: ex / ends.length, y: ey / ends.length },
+      });
+    }
+    const memberSet = new Set(group.wires);
+    const pure = new Set<string>();
+    for (const segId of shared) {
+      const line = layout.segmentLines.get(segId);
+      if (line && line.wires.every((w) => memberSet.has(w))) pure.add(segId);
+    }
+    const strand = new Map<string, number>();
+    group.wires.forEach((w, idx) => strand.set(w, idx));
+    runs.push({
+      group,
+      label: group.label ?? group.id ?? (group.cable ? `CB${i + 1}` : `TW${i + 1}`),
+      axes,
+      pure,
+      strand,
+    });
+  });
+  return runs;
+}
+
+function renderWires(harness: Harness, layout: LayoutResult, groupRuns: GroupRun[]): string {
+  const runByWire = new Map<string, GroupRun>();
+  for (const run of groupRuns) {
+    if (!run.group.twisted) continue; // non-twisted cables draw straight cores
+    for (const w of run.group.wires) runByWire.set(w, run);
+  }
+
   const parts: string[] = [];
   for (const wire of harness.wires) {
     const path = layout.wirePaths.get(wire.id);
@@ -400,18 +603,46 @@ function renderWires(harness: Harness, layout: LayoutResult): string {
       const midY = (a.y + b.y) / 2;
       d = `M ${fmt(a.x)} ${fmt(a.y)} Q ${fmt(a.x + bulge)} ${fmt(midY)} ${fmt(b.x)} ${fmt(b.y)}`;
     } else {
-      d = polylinePath(path.points);
+      const run = runByWire.get(wire.id);
+      const pieces: PathPiece[] = [];
+      let cur = path.points[0];
+      path.routeSegments.forEach((segId, i) => {
+        let entry = path.points[1 + 2 * i];
+        let exit = path.points[2 + 2 * i];
+        const axis = run?.axes.get(segId);
+        if (axis) {
+          // Weave around the group centerline instead of the parallel offset
+          const straight =
+            Math.hypot(entry.x - axis.start.x, entry.y - axis.start.y) <=
+            Math.hypot(entry.x - axis.end.x, entry.y - axis.end.y);
+          entry = straight ? axis.start : axis.end;
+          exit = straight ? axis.end : axis.start;
+        }
+        if (entry.x !== cur.x || entry.y !== cur.y) pieces.push({ kind: "line", from: cur, to: entry, phase: 0 });
+        pieces.push({
+          kind: axis ? "wave" : "line",
+          from: entry,
+          to: exit,
+          phase: (run?.strand.get(wire.id) ?? 0) % 2,
+        });
+        cur = exit;
+      });
+      const last = path.points[path.points.length - 1];
+      if (last.x !== cur.x || last.y !== cur.y) pieces.push({ kind: "line", from: cur, to: last, phase: 0 });
+      d = buildWireD(pieces);
     }
     const light = color.base === "#f2f2f2" || color.base === "#e6c700";
     if (light) {
-      parts.push(`<path d="${d}" fill="none" stroke="#999" stroke-width="3" stroke-linejoin="round"/>`);
+      parts.push(
+        `<path d="${d}" fill="none" stroke="#999" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`
+      );
     }
     parts.push(
-      `<path d="${d}" fill="none" stroke="${color.base}" stroke-width="2" stroke-linejoin="round"/>`
+      `<path d="${d}" fill="none" stroke="${color.base}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
     );
     if (color.stripe) {
       parts.push(
-        `<path d="${d}" fill="none" stroke="${color.stripe}" stroke-width="2" stroke-dasharray="5 5" stroke-linejoin="round"/>`
+        `<path d="${d}" fill="none" stroke="${color.stripe}" stroke-width="2" stroke-dasharray="5 5" stroke-linejoin="round" stroke-linecap="round"/>`
       );
     }
   }
@@ -419,90 +650,69 @@ function renderWires(harness: Harness, layout: LayoutResult): string {
 }
 
 /**
- * Multicore cable sheaths: an outline drawn along every segment all cores
- * share, with the cable label. Shielded cables get a second dashed outline.
+ * Multicore cable sheaths: a tube the cores run inside, drawn as layered
+ * strokes along the shared run. Shielded cables show a braid/foil rim.
  */
-function renderCableSheaths(harness: Harness, layout: LayoutResult): string {
+function renderCableSheaths(harness: Harness, layout: LayoutResult, groupRuns: GroupRun[]): string {
   const parts: string[] = [];
-  (harness.wireGroups ?? []).forEach((group, i) => {
-    if (!group.cable) return;
-    const label = group.label ?? group.id ?? `CB${i + 1}`;
-    const routes = group.wires.map((w) => layout.wirePaths.get(w)?.routeSegments ?? []);
-    const sharedSegs = (routes[0] ?? []).filter((segId) => routes.every((r) => r.includes(segId)));
-    const shielded = group.shield && group.shield !== "none";
-    sharedSegs.forEach((segId, s) => {
-      const line = layout.segmentLines.get(segId);
-      if (!line) return;
-      const dx = line.to.x - line.from.x;
-      const dy = line.to.y - line.from.y;
-      const len = Math.hypot(dx, dy);
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-      const h = Math.max(14, line.wires.length * 4 + 10);
-      const inset = 10;
-      parts.push(
-        `<g transform="translate(${fmt(line.from.x)} ${fmt(line.from.y)}) rotate(${fmt(angle)})">` +
-          `<rect x="${fmt(inset)}" y="${fmt(-h / 2)}" width="${fmt(len - inset * 2)}" height="${h}" rx="${fmt(h / 2)}" fill="none" stroke="#111" stroke-width="1.5"/>` +
-          (shielded
-            ? `<rect x="${fmt(inset + 3)}" y="${fmt(-h / 2 + 3)}" width="${fmt(len - inset * 2 - 6)}" height="${h - 6}" rx="${fmt((h - 6) / 2)}" fill="none" stroke="#555" stroke-width="0.75" stroke-dasharray="3 2"/>`
-            : "") +
-          (s === 0
-            ? `<rect x="${fmt(len / 2 - 34)}" y="${fmt(-h / 2 - 16)}" width="68" height="12" fill="white" stroke="#111" stroke-width="0.75"/>` +
-              text(len / 2, -h / 2 - 7, shielded ? `${label} · ${group.shield!.toUpperCase()} SHLD` : label, {
-                size: 7.5,
-                weight: "bold",
-                anchor: "middle",
-              })
-            : "") +
-          `</g>`
-      );
-    });
-  });
+  for (const run of groupRuns) {
+    if (!run.group.cable) continue;
+    const shield = run.group.shield && run.group.shield !== "none" ? run.group.shield : undefined;
+    const h = Math.max(14, run.group.wires.length * 3 + 10);
+    for (const [segId, { start, end }] of run.axes) {
+      // Jacket only where the cable runs by itself; in mixed bundles just the cores show
+      if (!run.pure.has(segId)) continue;
+      const d = `M ${fmt(start.x)} ${fmt(start.y)} L ${fmt(end.x)} ${fmt(end.y)}`;
+      parts.push(`<path d="${d}" fill="none" stroke="#4a4a4a" stroke-width="${fmt(h)}" stroke-linecap="round"/>`);
+      if (shield) {
+        const rim = shield === "braid" ? "url(#shieldBraid)" : "url(#shieldFoil)";
+        parts.push(
+          `<path d="${d}" fill="none" stroke="${rim}" stroke-width="${fmt(h - 2.5)}" stroke-linecap="round"/>`
+        );
+        parts.push(
+          `<path d="${d}" fill="none" stroke="#f6f6f6" stroke-width="${fmt(h - 7.5)}" stroke-linecap="round"/>`
+        );
+      } else {
+        parts.push(
+          `<path d="${d}" fill="none" stroke="#f6f6f6" stroke-width="${fmt(h - 2.5)}" stroke-linecap="round"/>`
+        );
+      }
+    }
+  }
   return parts.join("\n");
 }
 
-function renderTwistMarks(harness: Harness, layout: LayoutResult): string {
+/** Group callouts (TW1, CB1 · FOIL SHIELD) as haloed text above the run — no patch boxes. */
+function renderGroupLabels(groupRuns: GroupRun[]): string {
   const parts: string[] = [];
-  (harness.wireGroups ?? []).forEach((group, i) => {
-    if (!group.twisted || group.cable) return;
-    const label = group.label ?? group.id ?? `TW${i + 1}`;
-    // Find a segment shared by all wires in the group
-    const routes = group.wires.map((w) => layout.wirePaths.get(w)?.routeSegments ?? []);
-    const shared = routes[0]?.find((segId) => routes.every((r) => r.includes(segId)));
-    if (!shared) return;
-    const line = layout.segmentLines.get(shared);
-    if (!line) return;
-    const mx = (line.from.x + line.to.x) / 2;
-    const my = (line.from.y + line.to.y) / 2;
-    const angle = (Math.atan2(line.to.y - line.from.y, line.to.x - line.from.x) * 180) / Math.PI;
-
-    // Two antiphase waves crossing each other = the classic twisted-pair braid.
-    // When the group is a pair, draw each strand in its actual wire color.
-    const waveA = "M -24 -2 Q -16 7 -8 -2 Q 0 7 8 -2 Q 16 7 24 -2";
-    const waveB = "M -24 2 Q -16 -7 -8 2 Q 0 -7 8 2 Q 16 -7 24 2";
-    const groupWires = group.wires
-      .map((id) => harness.wires.find((w) => w.id === id))
-      .filter((w) => w !== undefined);
-    const strandColor = (idx: number): string => {
-      if (groupWires.length !== 2) return "#111";
-      return parseWireColor(groupWires[idx]!.color).base;
-    };
-    const strand = (d: string, color: string): string => {
-      const light = color === "#f2f2f2" || color === "#e6c700";
-      const halo = light
-        ? `<path d="${d}" fill="none" stroke="#999" stroke-width="3" stroke-linecap="round"/>`
-        : "";
-      return `${halo}<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
-    };
-    parts.push(
-      `<g transform="translate(${fmt(mx)} ${fmt(my)}) rotate(${fmt(angle)})">` +
-        `<rect x="-26" y="-9" width="52" height="18" fill="white"/>` +
-        strand(waveA, strandColor(0)) +
-        strand(waveB, strandColor(1)) +
-        `<rect x="-14" y="-26" width="28" height="12" fill="white" stroke="#111" stroke-width="0.75"/>` +
-        text(0, -16.5, label, { size: 8, weight: "bold", anchor: "middle" }) +
-        `</g>`
+  for (const run of groupRuns) {
+    const axes = [...run.axes.values()];
+    // Longest shared run hosts the label
+    const best = axes.reduce((a, b) =>
+      Math.hypot(a.end.x - a.start.x, a.end.y - a.start.y) >= Math.hypot(b.end.x - b.start.x, b.end.y - b.start.y)
+        ? a
+        : b
     );
-  });
+    const mx = (best.start.x + best.end.x) / 2;
+    const my = (best.start.y + best.end.y) / 2;
+    const dx = best.end.x - best.start.x;
+    const dy = best.end.y - best.start.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Perpendicular pointing up-ish so the label sits above the run
+    let px = -dy / len;
+    let py = dx / len;
+    if (py > 0) {
+      px = -px;
+      py = -py;
+    }
+    const h = run.group.cable ? Math.max(14, run.group.wires.length * 3 + 10) : 10;
+    const offset = h / 2 + 12;
+    const shield = run.group.shield && run.group.shield !== "none" ? run.group.shield : undefined;
+    const label = shield ? `${run.label} · ${shield.toUpperCase()} SHIELD` : run.label;
+    parts.push(
+      haloText(mx + px * offset, my + py * offset + 3, label, { size: 8, weight: "bold", anchor: "middle" })
+    );
+  }
   return parts.join("\n");
 }
 
@@ -564,6 +774,14 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
       `<pattern id="spiralWrap" width="8" height="8" patternUnits="userSpaceOnUse">` +
       `<rect width="8" height="8" fill="#efefef"/>` +
       `<path d="M 0 8 L 8 0" stroke="#b5b5b5" stroke-width="1.5"/>` +
+      `</pattern>` +
+      `<pattern id="shieldBraid" width="6" height="6" patternUnits="userSpaceOnUse">` +
+      `<rect width="6" height="6" fill="#e2e2e2"/>` +
+      `<path d="M 0 6 L 6 0 M 0 0 L 6 6" stroke="#8a8a8a" stroke-width="0.7"/>` +
+      `</pattern>` +
+      `<pattern id="shieldFoil" width="8" height="8" patternUnits="userSpaceOnUse">` +
+      `<rect width="8" height="8" fill="#e8e8e8"/>` +
+      `<path d="M 0 8 L 8 0" stroke="#9a9a9a" stroke-width="0.7"/>` +
       `</pattern>` +
       `</defs>`
   );
@@ -635,22 +853,24 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
     });
   }
 
-  // Drawing area: center on the sheet (above the bottom band); if the drawing
-  // would collide with the BOM in the top-right, fall back to the region left of it.
+  // Parts gallery: pictorial views in the top-left, clear of the schematic
+  const gallery = renderPartsGallery(
+    harness,
+    partsCache,
+    frame.x + 10,
+    frame.y + 10,
+    bomX - frame.x - 40
+  );
+  parts.push(gallery.svg);
+
+  // Drawing area: center on the sheet (below the gallery, above the bottom
+  // band); if the drawing would collide with the BOM in the top-right, fall
+  // back to the region left of it.
   const bottomBand = Math.max(wlH, tbH) + 24;
   const b = { ...layout.bounds };
-  // Part photos render above root-side nodes and beside leaf nodes; reserve room
-  const hasPhotos = harness.nodes.some(
-    (n) => "part" in n && n.part && partsCache[partKey(n.part)]?.image
-  );
-  if (hasPhotos) {
-    b.y -= 80;
-    b.height += 80;
-    b.width += 80;
-  }
   const pad = 30;
-  const availY = frame.y + 20;
-  const availH = frame.h - bottomBand - 40;
+  const availY = frame.y + 20 + gallery.height;
+  const availH = frame.h - bottomBand - 40 - gallery.height;
   let scale = Math.min((frame.w - 40) / (b.width + pad * 2), availH / (b.height + pad * 2), 1.25);
   let tx = frame.x + (frame.w - b.width * scale) / 2 - b.x * scale;
   let ty = availY + (availH - b.height * scale) / 2 - b.y * scale;
@@ -665,11 +885,12 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
     ty = availY + (availH - b.height * scale) / 2 - b.y * scale;
   }
 
+  const groupRuns = computeGroupRuns(harness, layout);
   parts.push(`<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(scale)})">`);
   parts.push(renderSegments(layout));
-  parts.push(renderWires(harness, layout));
-  parts.push(renderCableSheaths(harness, layout));
-  parts.push(renderTwistMarks(harness, layout));
+  parts.push(renderCableSheaths(harness, layout, groupRuns));
+  parts.push(renderWires(harness, layout, groupRuns));
+  parts.push(renderGroupLabels(groupRuns));
   for (const box of layout.boxes.values()) parts.push(renderNode(box, layout, partsCache));
   parts.push(`</g>`);
 
