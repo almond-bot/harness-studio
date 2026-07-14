@@ -18,7 +18,7 @@ node packages/cli/dist/index.js dev ./examples
 node packages/cli/dist/index.js validate examples/*.harness.json
 
 # headless vector PDF export (no browser needed)
-node packages/cli/dist/index.js export examples/alm-1233-xt30-2p2.harness.json -o harness.pdf
+node packages/cli/dist/index.js export examples/branched-battery-pigtail.harness.json -o harness.pdf
 ```
 
 Once published to npm, the same commands run as `npx almond-harness-studio <cmd>`.
@@ -29,7 +29,7 @@ A harness is a tree of **nodes** (connectors, terminals, splices, breakouts) joi
 
 ```json
 {
-  "meta": { "title": "XT30(2+2) SOLDERLESS HARNESS", "partNumber": "ALM-1233-01", "rev": "A", "sheet": "ANSI B" },
+  "meta": { "title": "BATTERY POWER HARNESS", "partNumber": "PN-0001", "rev": "A", "sheet": "ANSI B" },
   "nodes": [
     { "id": "J1", "kind": "connector", "mpn": "XT30(2+2)-F.G.B",
       "pins": [{ "id": "1", "label": "BAT+" }, { "id": "2", "label": "BAT-" }] },
