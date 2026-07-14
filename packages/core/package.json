@@ -4,6 +4,14 @@
   "description": "Schema, validation, layout, and SVG rendering for almond-harness-studio wire harness drawings",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almond-bot/harness-studio.git",
+    "directory": "packages/core"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

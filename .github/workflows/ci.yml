@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run check:examples
+      - name: Smoke-test headless export
+        run: |
+          node packages/cli/dist/index.js export examples/branched-battery-pigtail.harness.json -o /tmp/smoke.pdf
+          node packages/cli/dist/index.js tables examples/branched-battery-pigtail.harness.json -o /tmp

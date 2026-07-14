@@ -28,7 +28,7 @@ async function listHarnessFiles(dataDir: string): Promise<string[]> {
       if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(full);
-      else if (entry.name.endsWith(".harness.json") || entry.name.endsWith(".json")) {
+      else if (entry.name.endsWith(".harness.json")) {
         results.push(path.relative(dataDir, full));
       }
     }

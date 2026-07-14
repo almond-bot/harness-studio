@@ -4,6 +4,14 @@
   "description": "Viewer app for almond-harness-studio wire harness drawings",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almond-bot/harness-studio.git",
+    "directory": "packages/app"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist"
   ],

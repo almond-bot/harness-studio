@@ -28,7 +28,7 @@ node packages/cli/dist/index.js export examples/branched-battery-pigtail.harness
 node packages/cli/dist/index.js tables examples/branched-battery-pigtail.harness.json
 ```
 
-Once published to npm, the same commands run as `npx almond-harness-studio <cmd>`.
+Once the packages are published to npm, the same commands run anywhere as `npx almond-harness-studio <cmd>` — no clone needed.
 
 ## The format in 30 seconds
 
@@ -118,6 +118,15 @@ npm run check:examples  # validates all example harnesses
 ```
 
 Point the dev viewer at a private data folder: `ALMOND_DATA_DIR=/path/to/harnesses npm run dev`.
+
+### Releasing to npm
+
+Three packages ship together, same version: `@almond-harness-studio/core`, `@almond-harness-studio/app`, and the CLI `almond-harness-studio` (which bundles the viewer for `dev`). From a clean checkout:
+
+```bash
+npm ci && npm run build && npm run check:examples
+npm publish -w @almond-harness-studio/core -w @almond-harness-studio/app -w almond-harness-studio
+```
 
 ## License
 
