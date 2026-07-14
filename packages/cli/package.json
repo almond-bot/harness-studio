@@ -1,0 +1,50 @@
+{
+  "name": "almond-harness-studio",
+  "version": "0.1.0",
+  "description": "CLI for almond-harness-studio: live-preview server, validation, and headless PDF export of wire harness drawings",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almond-bot/harness-studio.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/almond-bot/harness-studio#readme",
+  "bugs": "https://github.com/almond-bot/harness-studio/issues",
+  "keywords": [
+    "wire-harness",
+    "cable",
+    "wiring",
+    "schematic",
+    "bom",
+    "pdf",
+    "wireviz"
+  ],
+  "bin": {
+    "almond-harness-studio": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./middleware": "./dist/middleware.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch"
+  },
+  "dependencies": {
+    "@almond-harness-studio/core": "0.1.0",
+    "@almond-harness-studio/app": "0.1.0",
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.0",
+    "pdfkit": "^0.17.1",
+    "svg-to-pdfkit": "^0.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/pdfkit": "^0.17.3"
+  }
+}

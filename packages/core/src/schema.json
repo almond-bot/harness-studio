@@ -1,0 +1,242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://almond-harness-studio.dev/schema/v1/harness.schema.json",
+  "title": "Wire Harness Drawing",
+  "type": "object",
+  "required": ["meta", "nodes", "segments", "wires"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "meta": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "partNumber": { "type": "string" },
+        "rev": { "type": "string" },
+        "date": { "type": "string" },
+        "company": { "type": "string" },
+        "drawnBy": { "type": "string" },
+        "sheet": { "enum": ["ANSI B", "Letter", "A4", "A3"] }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "kind": { "enum": ["connector", "terminal", "splice", "breakout", "diode", "resistor"] },
+          "position": { "$ref": "#/definitions/position" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "connector" } } },
+            "then": {
+              "required": ["pins", "part"],
+              "properties": {
+                "part": { "$ref": "#/definitions/part" },
+                "contacts": { "$ref": "#/definitions/part" },
+                "hardware": { "type": "array", "items": { "$ref": "#/definitions/part" } },
+                "pins": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "label": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "terminal" } } },
+            "then": {
+              "required": ["style"],
+              "properties": {
+                "style": {
+                  "enum": [
+                    "ring",
+                    "spade",
+                    "ferrule",
+                    "quick-connect-male",
+                    "quick-connect-female",
+                    "tinned",
+                    "bare",
+                    "solder-cup",
+                    "pin"
+                  ]
+                },
+                "stud": { "type": "string" },
+                "part": { "$ref": "#/definitions/part" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "terminal" } }, "required": ["kind"] },
+            "then": {
+              "if": {
+                "properties": {
+                  "style": {
+                    "enum": ["ring", "spade", "ferrule", "quick-connect-male", "quick-connect-female", "solder-cup", "pin"]
+                  }
+                }
+              },
+              "then": { "required": ["part"] }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "splice" } } },
+            "then": {
+              "properties": {
+                "method": { "enum": ["crimp", "solder", "ultrasonic"] },
+                "part": { "$ref": "#/definitions/part" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "enum": ["diode", "resistor"] } }, "required": ["kind"] },
+            "then": {
+              "required": ["part"],
+              "properties": {
+                "part": { "$ref": "#/definitions/part" },
+                "cathodeTowards": { "$ref": "#/definitions/id" }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to", "lengthMm"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "from": { "$ref": "#/definitions/id" },
+          "to": { "$ref": "#/definitions/id" },
+          "lengthMm": { "type": "number", "exclusiveMinimum": 0 },
+          "covering": { "enum": ["none", "heatshrink", "pet-braid", "split-loom", "spiral-wrap"] }
+        }
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "from": { "$ref": "#/definitions/endpoint" },
+          "to": { "$ref": "#/definitions/endpoint" },
+          "gauge": { "type": "string" },
+          "color": { "type": "string" },
+          "label": { "type": "string" },
+          "route": { "type": "array", "items": { "$ref": "#/definitions/id" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "wireGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["wires"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "wires": { "type": "array", "minItems": 2, "items": { "$ref": "#/definitions/id" } },
+          "twisted": { "type": "boolean" },
+          "cable": { "type": "boolean" },
+          "part": { "$ref": "#/definitions/part" },
+          "shield": { "enum": ["none", "foil", "braid"] },
+          "label": { "type": "string" }
+        }
+      }
+    },
+    "accessories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["part", "qty"],
+        "additionalProperties": false,
+        "properties": {
+          "part": { "$ref": "#/definitions/part" },
+          "qty": { "type": ["number", "string"] },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": { "$ref": "#/definitions/id" }
+      }
+    },
+    "parts": {
+      "type": "object",
+      "description": "Resolved distributor data keyed by \"vendor:number\". Maintained by `parts fetch` — do not hand-edit.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["vendor", "number", "mpn", "manufacturer", "description", "fetchedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "vendor": { "enum": ["lcsc", "mouser", "digikey"] },
+          "number": { "type": "string" },
+          "mpn": { "type": "string" },
+          "manufacturer": { "type": "string" },
+          "description": { "type": "string" },
+          "datasheetUrl": { "type": "string" },
+          "imageUrl": { "type": "string" },
+          "image": { "type": "string" },
+          "productUrl": { "type": "string" },
+          "priceUsd": { "type": "number" },
+          "stock": { "type": "number" },
+          "fetchedAt": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "part": {
+      "type": "object",
+      "required": ["vendor", "number"],
+      "additionalProperties": false,
+      "properties": {
+        "vendor": { "enum": ["lcsc", "mouser", "digikey"] },
+        "number": { "type": "string", "minLength": 1 }
+      }
+    },
+    "endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_+-]+)?$"
+    },
+    "position": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    }
+  }
+}

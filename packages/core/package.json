@@ -1,0 +1,32 @@
+{
+  "name": "@almond-harness-studio/core",
+  "version": "0.1.0",
+  "description": "Schema, validation, layout, and SVG rendering for almond-harness-studio wire harness drawings",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almond-bot/harness-studio.git",
+    "directory": "packages/core"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./schema.json": "./src/schema.json"
+  },
+  "files": [
+    "dist",
+    "src/schema.json"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  }
+}
