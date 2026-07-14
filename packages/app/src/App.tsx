@@ -11,6 +11,12 @@ import { downloadPdf, downloadSvg, printSheet } from "./exportPdf";
 import { SettingsDialog, loadVendorKeys, type VendorKeys } from "./Settings";
 
 const canPickFiles = typeof window !== "undefined" && !!window.showOpenFilePicker;
+const canPickFolder = typeof window !== "undefined" && !!window.showDirectoryPicker;
+
+interface FolderFile {
+  name: string;
+  handle: FileSystemFileHandle;
+}
 
 export function App() {
   const { server, refresh } = useHarnessServer();
@@ -18,6 +24,9 @@ export function App() {
   const [loaded, setLoaded] = useState<LoadedHarness | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [watchedHandle, setWatchedHandle] = useState<FileSystemFileHandle | null>(null);
+  const [folder, setFolder] = useState<FileSystemDirectoryHandle | null>(null);
+  const [folderFiles, setFolderFiles] = useState<FolderFile[]>([]);
+  const [folderSelected, setFolderSelected] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [keys, setKeys] = useState<VendorKeys>(() => loadVendorKeys());
   const [fetchingParts, setFetchingParts] = useState(false);
@@ -91,11 +100,71 @@ export function App() {
       const [handle] = await window.showOpenFilePicker({
         types: [{ description: "Harness JSON", accept: { "application/json": [".json"] } }],
       });
-      if (handle) await watchHandle(handle);
+      if (handle) {
+        setFolder(null);
+        setFolderFiles([]);
+        setFolderSelected(null);
+        await watchHandle(handle);
+      }
     } catch {
       // picker dismissed
     }
   }, [watchHandle]);
+
+  const scanFolder = useCallback(async (dir: FileSystemDirectoryHandle): Promise<FolderFile[]> => {
+    const files: FolderFile[] = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind === "file" && entry.name.endsWith(".harness.json")) {
+        files.push({ name: entry.name, handle: entry as FileSystemFileHandle });
+      }
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    return files;
+  }, []);
+
+  const openFolder = useCallback(
+    async (dir: FileSystemDirectoryHandle) => {
+      const files = await scanFolder(dir);
+      setFolder(dir);
+      setFolderFiles(files);
+      setSelected(null);
+      if (files.length > 0) {
+        setFolderSelected(files[0].name);
+        await watchHandle(files[0].handle);
+      } else {
+        setFolderSelected(null);
+        setWatchedHandle(null);
+        setLoaded(null);
+      }
+    },
+    [scanFolder, watchHandle]
+  );
+
+  const pickFolder = useCallback(async () => {
+    if (!window.showDirectoryPicker) return;
+    try {
+      await openFolder(await window.showDirectoryPicker());
+    } catch {
+      // picker dismissed
+    }
+  }, [openFolder]);
+
+  // Keep the folder listing fresh: pick up files the user (or agent) adds/removes
+  useEffect(() => {
+    if (!folder) return;
+    const timer = setInterval(async () => {
+      try {
+        const files = await scanFolder(folder);
+        setFolderFiles((prev) => {
+          const same = prev.length === files.length && prev.every((p, i) => p.name === files[i].name);
+          return same ? prev : files;
+        });
+      } catch {
+        // Permission revoked; keep the last listing
+      }
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [folder, scanFolder]);
 
   // Auto-select first file once the server responds
   useEffect(() => {
@@ -129,7 +198,14 @@ export function App() {
       const file = e.dataTransfer.files[0];
       if (handlePromise) {
         const handle = await handlePromise;
+        if (handle?.kind === "directory") {
+          await openFolder(handle as unknown as FileSystemDirectoryHandle);
+          return;
+        }
         if (handle?.kind === "file") {
+          setFolder(null);
+          setFolderFiles([]);
+          setFolderSelected(null);
           await watchHandle(handle as FileSystemFileHandle);
           return;
         }
@@ -137,9 +213,12 @@ export function App() {
       if (!file) return;
       setWatchedHandle(null);
       setSelected(null);
+      setFolder(null);
+      setFolderFiles([]);
+      setFolderSelected(null);
       setLoaded(parseHarnessText(file.name, await file.text()));
     },
-    [watchHandle]
+    [watchHandle, openFolder]
   );
 
   const baseName = loaded?.sourceName.replace(/\.harness\.json$|\.json$/, "").split("/").pop() ?? "harness";
@@ -177,15 +256,47 @@ export function App() {
               {server.files.length === 0 && <li className="empty">no .harness.json files found</li>}
             </ul>
           </>
+        ) : folder ? (
+          <>
+            <div className="data-dir" title={folder.name}>
+              {folder.name}/
+            </div>
+            <ul className="file-list">
+              {folderFiles.map((f) => (
+                <li key={f.name}>
+                  <button
+                    className={folderSelected === f.name ? "active" : ""}
+                    onClick={() => {
+                      setFolderSelected(f.name);
+                      void watchHandle(f.handle);
+                    }}
+                  >
+                    {f.name}
+                  </button>
+                </li>
+              ))}
+              {folderFiles.length === 0 && <li className="empty">no .harness.json files found</li>}
+            </ul>
+            <div className="offline">
+              <button className="open-file" onClick={() => void pickFolder()}>
+                Open another folder…
+              </button>
+            </div>
+          </>
         ) : (
           <div className="offline">
             <p>
-              Preview a <code>.harness.json</code> from your machine. Files are read in-browser and
-              never uploaded.
+              Preview <code>.harness.json</code> files from your machine. Files are read in-browser
+              and never uploaded.
             </p>
             {canPickFiles && (
               <button className="open-file" onClick={() => void pickFile()}>
                 Open harness file…
+              </button>
+            )}
+            {canPickFolder && (
+              <button className="open-file" onClick={() => void pickFolder()}>
+                Open folder…
               </button>
             )}
             <p className="offline-hint">
@@ -288,12 +399,17 @@ export function App() {
                 {server.connected
                   ? "Select a harness from the sidebar."
                   : canPickFiles
-                    ? "Open or drop a .harness.json file to get started."
+                    ? "Open a folder or drop a .harness.json file to get started."
                     : "Drop a .harness.json file here to get started."}
               </p>
               {!server.connected && canPickFiles && (
                 <button className="open-file big" onClick={() => void pickFile()}>
                   Open harness file…
+                </button>
+              )}
+              {!server.connected && canPickFolder && (
+                <button className="open-file big" onClick={() => void pickFolder()}>
+                  Open folder…
                 </button>
               )}
             </div>

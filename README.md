@@ -81,7 +81,8 @@ The agent loop: write JSON → `validate` (schema plus referential checks: pin r
 The viewer is a static SPA — deploy `packages/app/dist` to any static host (Vercel, Netlify, Cloudflare Pages) and it runs in hosted mode:
 
 - **Open harness file…** (Chrome/Edge) opens a local `.harness.json` via the File System Access API and live-re-renders every time the file is saved — nothing is uploaded, the file is read directly in the browser
-- Drag-and-drop works in all browsers (one-shot preview; Chromium browsers get live watching on drop too)
+- **Open folder…** (Chrome/Edge) lists every `*.harness.json` in a local folder in the sidebar, live-watches the selected file, and picks up files added to the folder
+- Drag-and-drop works in all browsers — drop a file for a one-shot preview, or a folder to browse it (Chromium browsers get live watching too)
 - PDF/SVG download and print work entirely client-side
 
 The local CLI (`dev`) remains the full experience: a whole folder in the sidebar plus push-based reload.

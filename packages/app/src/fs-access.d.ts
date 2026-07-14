@@ -9,6 +9,11 @@ interface Window {
     types?: OpenFilePickerType[];
     multiple?: boolean;
   }) => Promise<FileSystemFileHandle[]>;
+  showDirectoryPicker?: (options?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
+}
+
+interface FileSystemDirectoryHandle {
+  values(): AsyncIterableIterator<FileSystemHandle>;
 }
 
 interface DataTransferItem {
