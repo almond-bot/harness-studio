@@ -109,7 +109,8 @@ function terminalShortDesc(node: TerminalNode): string {
 
 function renderTerminalSymbol(box: NodeBox): string {
   const node = box.node as TerminalNode;
-  const cy = box.y + box.height / 2 - 6;
+  // Symbol sits exactly on the box centerline so it meets the incoming wire
+  const cy = box.y + box.height / 2;
   const anchorX = box.facesRight ? box.x + box.width : box.x;
   const symX = box.facesRight ? box.x + box.width - 16 : box.x + 16;
   const tailDir = box.facesRight ? 1 : -1;
@@ -162,7 +163,7 @@ function renderTerminalSymbol(box: NodeBox): string {
       break;
   }
   const labelX = box.x + box.width / 2;
-  parts.push(text(labelX, box.y + box.height - 8, `${node.id} · ${terminalShortDesc(node)}`, { size: 9, weight: "bold", anchor: "middle" }));
+  parts.push(text(labelX, box.y + box.height + 6, `${node.id} · ${terminalShortDesc(node)}`, { size: 9, weight: "bold", anchor: "middle" }));
   return parts.join("\n");
 }
 
@@ -303,12 +304,32 @@ function renderTwistMarks(harness: Harness, layout: LayoutResult): string {
     const mx = (line.from.x + line.to.x) / 2;
     const my = (line.from.y + line.to.y) / 2;
     const angle = (Math.atan2(line.to.y - line.from.y, line.to.x - line.from.x) * 180) / Math.PI;
+
+    // Two antiphase waves crossing each other = the classic twisted-pair braid.
+    // When the group is a pair, draw each strand in its actual wire color.
+    const waveA = "M -24 -2 Q -16 7 -8 -2 Q 0 7 8 -2 Q 16 7 24 -2";
+    const waveB = "M -24 2 Q -16 -7 -8 2 Q 0 -7 8 2 Q 16 -7 24 2";
+    const groupWires = group.wires
+      .map((id) => harness.wires.find((w) => w.id === id))
+      .filter((w) => w !== undefined);
+    const strandColor = (idx: number): string => {
+      if (groupWires.length !== 2) return "#111";
+      return parseWireColor(groupWires[idx]!.color).base;
+    };
+    const strand = (d: string, color: string): string => {
+      const light = color === "#f2f2f2" || color === "#e6c700";
+      const halo = light
+        ? `<path d="${d}" fill="none" stroke="#999" stroke-width="3" stroke-linecap="round"/>`
+        : "";
+      return `${halo}<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
+    };
     parts.push(
       `<g transform="translate(${fmt(mx)} ${fmt(my)}) rotate(${fmt(angle)})">` +
-        `<path d="M -16 -5 Q 0 7 16 -5" fill="none" stroke="#111" stroke-width="1.25"/>` +
-        `<path d="M -16 5 Q 0 -7 16 5" fill="none" stroke="#111" stroke-width="1.25"/>` +
-        `<rect x="-14" y="-22" width="28" height="12" fill="white" stroke="#111" stroke-width="0.75"/>` +
-        text(0, -12.5, label, { size: 8, weight: "bold", anchor: "middle" }) +
+        `<rect x="-26" y="-9" width="52" height="18" fill="white"/>` +
+        strand(waveA, strandColor(0)) +
+        strand(waveB, strandColor(1)) +
+        `<rect x="-14" y="-26" width="28" height="12" fill="white" stroke="#111" stroke-width="0.75"/>` +
+        text(0, -16.5, label, { size: 8, weight: "bold", anchor: "middle" }) +
         `</g>`
     );
   });
@@ -442,19 +463,26 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
     });
   }
 
-  // Drawing area: fit above the bottom band, left of the BOM
+  // Drawing area: center on the sheet (above the bottom band); if the drawing
+  // would collide with the BOM in the top-right, fall back to the region left of it.
   const bottomBand = Math.max(wlH, tbH) + 24;
-  const area = {
-    x: frame.x + 20,
-    y: frame.y + 20,
-    w: frame.w - bomW - 60,
-    h: frame.h - bottomBand - 40,
-  };
   const b = layout.bounds;
   const pad = 30;
-  const scale = Math.min(area.w / (b.width + pad * 2), area.h / (b.height + pad * 2), 1.25);
-  const tx = area.x + (area.w - b.width * scale) / 2 - b.x * scale;
-  const ty = area.y + (area.h - b.height * scale) / 2 - b.y * scale;
+  const availY = frame.y + 20;
+  const availH = frame.h - bottomBand - 40;
+  let scale = Math.min((frame.w - 40) / (b.width + pad * 2), availH / (b.height + pad * 2), 1.25);
+  let tx = frame.x + (frame.w - b.width * scale) / 2 - b.x * scale;
+  let ty = availY + (availH - b.height * scale) / 2 - b.y * scale;
+
+  const bomH = tableHeight(bom.length, "BILL OF MATERIALS");
+  const drawRight = tx + (b.x + b.width) * scale;
+  const drawTop = ty + b.y * scale;
+  if (drawRight > bomX - 20 && drawTop < bomY + bomH + 20) {
+    const safeW = frame.w - bomW - 60;
+    scale = Math.min(safeW / (b.width + pad * 2), availH / (b.height + pad * 2), 1.25);
+    tx = frame.x + 20 + (safeW - b.width * scale) / 2 - b.x * scale;
+    ty = availY + (availH - b.height * scale) / 2 - b.y * scale;
+  }
 
   parts.push(`<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(scale)})">`);
   parts.push(renderSegments(layout));
