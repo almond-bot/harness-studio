@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "title": "BRANCHED BATTERY PIGTAIL (DEMO)",
+    "partNumber": "DEMO-0002",
+    "rev": "-",
+    "date": "2026-07-13",
+    "company": "ALMOND AI, INC.",
+    "drawnBy": "AGENT",
+    "sheet": "ANSI B"
+  },
+  "nodes": [
+    {
+      "id": "J1",
+      "kind": "connector",
+      "mpn": "XT30(2+2)-F.G.B",
+      "description": "XT30(2+2) female",
+      "pins": [
+        { "id": "1", "label": "VBAT" },
+        { "id": "2", "label": "GND" },
+        { "id": "S1", "label": "SDA" },
+        { "id": "S2", "label": "SCL" }
+      ]
+    },
+    { "id": "B1", "kind": "breakout" },
+    { "id": "T1", "kind": "terminal", "style": "ring", "stud": "M4", "mpn": "MV14-4R" },
+    { "id": "T2", "kind": "terminal", "style": "ring", "stud": "M4", "mpn": "MV14-4R" },
+    {
+      "id": "J2",
+      "kind": "connector",
+      "mpn": "GHR-02V-S",
+      "description": "JST GH 1.25MM 2 POS",
+      "pins": [
+        { "id": "1", "label": "SDA" },
+        { "id": "2", "label": "SCL" }
+      ]
+    }
+  ],
+  "segments": [
+    { "id": "SEG1", "from": "J1", "to": "B1", "lengthMm": 80, "covering": "pet-braid" },
+    { "id": "SEG2", "from": "B1", "to": "T1", "lengthMm": 60 },
+    { "id": "SEG3", "from": "B1", "to": "T2", "lengthMm": 60 },
+    { "id": "SEG4", "from": "B1", "to": "J2", "lengthMm": 150, "covering": "heatshrink" }
+  ],
+  "wires": [
+    { "id": "W1", "from": "J1.1", "to": "T1", "gauge": "16 AWG", "color": "red" },
+    { "id": "W2", "from": "J1.2", "to": "T2", "gauge": "16 AWG", "color": "black" },
+    { "id": "W3", "from": "J1.S1", "to": "J2.1", "gauge": "26 AWG", "color": "white" },
+    { "id": "W4", "from": "J1.S2", "to": "J2.2", "gauge": "26 AWG", "color": "blue" }
+  ],
+  "wireGroups": [{ "id": "TW1", "wires": ["W3", "W4"], "twisted": true }],
+  "accessories": [
+    { "description": "Heatshrink, dual wall, 6 mm", "qty": "40 mm" }
+  ],
+  "notes": [
+    "CRIMP TERMINATIONS PER IPC/WHMA-A-620.",
+    "BRANCH LENGTHS MEASURED FROM BREAKOUT CENTER.",
+    "TWIST SDA/SCL PAIR AT 25 MM LAY."
+  ]
+}
