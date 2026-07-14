@@ -64,10 +64,23 @@ export interface ConnectorNode {
   /** Sourced component (required — no generic connectors) */
   part: PartRef;
   pins: Pin[];
+  /** Crimp contact part, applied per wired cavity (BOM qty = wired pins) */
+  contacts?: PartRef;
+  /** Locks, boots, backshells, dust covers — one BOM line each */
+  hardware?: PartRef[];
   position?: Position;
 }
 
-export type TerminalStyle = "ring" | "spade" | "ferrule" | "tinned" | "bare" | "solder-cup" | "pin";
+export type TerminalStyle =
+  | "ring"
+  | "spade"
+  | "ferrule"
+  | "quick-connect-male"
+  | "quick-connect-female"
+  | "tinned"
+  | "bare"
+  | "solder-cup"
+  | "pin";
 
 export interface TerminalNode {
   id: string;
@@ -100,7 +113,18 @@ export interface BreakoutNode {
   position?: Position;
 }
 
-export type HarnessNode = ConnectorNode | TerminalNode | SpliceNode | BreakoutNode;
+/** Inline two-lead component spliced into the harness (flyback diodes, pull resistors). */
+export interface InlineComponentNode {
+  id: string;
+  kind: "diode" | "resistor";
+  /** Sourced component (required) */
+  part: PartRef;
+  /** Diode only: neighbor node id the cathode band faces; defaults away from the layout root */
+  cathodeTowards?: string;
+  position?: Position;
+}
+
+export type HarnessNode = ConnectorNode | TerminalNode | SpliceNode | BreakoutNode | InlineComponentNode;
 
 export type Covering = "none" | "heatshrink" | "pet-braid" | "split-loom" | "spiral-wrap";
 
@@ -114,7 +138,11 @@ export interface Segment {
 
 export interface Wire {
   id: string;
-  /** Endpoint reference: "J1.1" (node.pin) or "T1" (pinless node) */
+  /**
+   * Endpoint reference: "J1.1" (node.pin) or "T1" (pinless node).
+   * A wire between two pins of the same connector is a jumper (loopback)
+   * with zero length.
+   */
   from: string;
   to: string;
   gauge?: string;
@@ -126,10 +154,21 @@ export interface Wire {
   notes?: string;
 }
 
+export type CableShield = "none" | "foil" | "braid";
+
 export interface WireGroup {
   id?: string;
   wires: string[];
   twisted?: boolean;
+  /** Cores of one multicore cable, drawn with a shared sheath */
+  cable?: boolean;
+  /**
+   * Sourced cable part (cable groups). When set, the BOM lists the cable
+   * (length = longest core) instead of the individual core wires.
+   */
+  part?: PartRef;
+  /** Cable shield; connect a drain via a wire from a core to ground */
+  shield?: CableShield;
   label?: string;
 }
 

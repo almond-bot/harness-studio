@@ -56,6 +56,9 @@ function nodeSize(node: HarnessNode): { width: number; height: number } {
       return { width: 28, height: 28 };
     case "breakout":
       return { width: 14, height: 14 };
+    case "diode":
+    case "resistor":
+      return { width: 44, height: 24 };
   }
 }
 
@@ -214,14 +217,22 @@ export function layoutHarness(harness: Harness): LayoutResult {
     const route = wireRoutes.get(wire.id) ?? [];
     const points: Point[] = [];
 
-    const endpointAnchor = (ref: string): Point => {
+    const endpointAnchor = (ref: string, otherRef: string): Point => {
       const { nodeId, pinId } = parseEndpoint(ref);
       const box = boxes.get(nodeId)!;
       if (pinId && box.pinAnchors.has(pinId)) return box.pinAnchors.get(pinId)!;
+      if (box.node.kind === "diode" || box.node.kind === "resistor") {
+        // Two-lead device: each wire attaches on the side facing its far end
+        const other = boxes.get(parseEndpoint(otherRef).nodeId);
+        const rightSide = other
+          ? other.x + other.width / 2 >= box.x + box.width / 2
+          : !box.facesRight;
+        return { x: rightSide ? box.x + box.width : box.x, y: box.y + box.height / 2 };
+      }
       return { x: box.facesRight ? box.x + box.width : box.x, y: box.y + box.height / 2 };
     };
 
-    points.push(endpointAnchor(wire.from));
+    points.push(endpointAnchor(wire.from, wire.to));
     let currentNode = parseEndpoint(wire.from).nodeId;
     for (const segId of route) {
       const line = segmentLines.get(segId)!;
@@ -241,7 +252,7 @@ export function layoutHarness(harness: Harness): LayoutResult {
       points.push({ x: b.x + ox, y: b.y + oy });
       currentNode = nearFirst ? seg.to : seg.from;
     }
-    points.push(endpointAnchor(wire.to));
+    points.push(endpointAnchor(wire.to, wire.from));
     wirePaths.set(wire.id, { wireId: wire.id, points, routeSegments: route });
   }
 

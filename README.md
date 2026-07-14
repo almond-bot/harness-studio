@@ -23,6 +23,9 @@ node packages/cli/dist/index.js parts fetch examples/branched-battery-pigtail.ha
 
 # headless vector PDF export (no browser needed)
 node packages/cli/dist/index.js export examples/branched-battery-pigtail.harness.json -o harness.pdf
+
+# wiring table + BOM as CSV
+node packages/cli/dist/index.js tables examples/branched-battery-pigtail.harness.json
 ```
 
 Once published to npm, the same commands run as `npx almond-harness-studio <cmd>`.
@@ -47,7 +50,7 @@ Components are always real, orderable parts referenced by distributor part numbe
 }
 ```
 
-Supported today: multi-branch harnesses, twisted pairs (`wireGroups`), ring/spade/ferrule/tinned/bare/solder-cup terminations, splices, heatshrink / PET braid / split loom / spiral wrap coverings, striped wire colors, per-node layout overrides.
+Supported today: multi-branch harnesses, twisted pairs and shielded multicore cables (`wireGroups`), ring/spade/ferrule/quick-connect/tinned/bare/solder-cup/pin terminations, splices, inline diodes and resistors (flyback diodes, pull resistors), jumper (loopback) wires, connector crimp contacts and hardware (locks/boots/backshells), heatshrink / PET braid / split loom / spiral wrap coverings, striped wire colors, per-node layout overrides, and CSV wiring-table/BOM export (`tables`).
 
 ### Part sourcing
 
@@ -89,7 +92,7 @@ The local CLI (`dev`) remains the full experience: a whole folder in the sidebar
 |---|---|
 | `packages/core` | Types, JSON Schema, validator, tree layout, pure SVG-string renderer (no React — runs in Node and the browser) |
 | `packages/app` | React viewer: file sidebar, zoom/pan preview, inline validation errors, PDF/SVG download, print, drag-drop demo mode |
-| `packages/cli` | `dev` server (serves viewer + file API + SSE live reload + part-lookup proxy), `validate`, `parts fetch`, `config`, `export` (pdfkit vector PDF) |
+| `packages/cli` | `dev` server (serves viewer + file API + SSE live reload + part-lookup proxy), `validate`, `parts fetch`, `config`, `export` (pdfkit vector PDF), `tables` (CSV) |
 | `skill/` | Portable agent skill (SKILL.md + reference + examples) |
 | `examples/` | Sample harnesses |
 

@@ -7,10 +7,10 @@ Complete field documentation for `*.harness.json` files. The machine-readable sc
 | Field | Required | Description |
 |---|---|---|
 | `meta` | yes | Title block fields |
-| `nodes` | yes | Connectors, terminals, splices, breakouts |
+| `nodes` | yes | Connectors, terminals, splices, breakouts, inline diodes/resistors |
 | `segments` | yes | Bundle runs between nodes (the harness tree) |
 | `wires` | yes | Conductors, routed through segments |
-| `wireGroups` | no | Twisted pairs/triples |
+| `wireGroups` | no | Twisted pairs and multicore cables |
 | `accessories` | no | Extra sourced BOM lines (heatshrink pieces, labels, ties) |
 | `notes` | no | Numbered manufacturing notes on the sheet |
 | `layout` | no | `{ "root": "J1" }` — node placed at the drawing's left |
@@ -45,12 +45,14 @@ All nodes: `id` (unique, `[A-Za-z0-9_-]+`), `kind`, optional `position` `{x, y}`
 
 - `part` (required): sourced component, e.g. `{ "vendor": "lcsc", "number": "C30170181" }`
 - `pins` (required): array of `{ "id": "1", "label": "BAT+" }`. Pin ids are strings — `"S1"`, `"A"` are fine.
+- `contacts`: crimp contact part; BOM quantity = number of wired cavities
+- `hardware`: array of parts for locks, boots, backshells, dust covers (one BOM line each)
 
 ### terminal
 
-- `style` (required): `ring`, `spade`, `ferrule`, `tinned`, `bare`, `solder-cup`, `pin`
+- `style` (required): `ring`, `spade`, `ferrule`, `quick-connect-male`, `quick-connect-female`, `tinned`, `bare`, `solder-cup`, `pin`
 - `stud`: for ring/spade, e.g. `"M4"` or `"#10"`
-- `part`: required for real parts (`ring`, `spade`, `ferrule`, `solder-cup`, `pin`); omitted for wire preparations (`tinned`, `bare`)
+- `part`: required for real parts; omitted only for wire preparations (`tinned`, `bare`)
 
 ### splice
 
@@ -61,6 +63,16 @@ All nodes: `id` (unique, `[A-Za-z0-9_-]+`), `kind`, optional `position` `{x, y}`
 ### breakout
 
 No electrical function — the point where a bundle branches. Give it an id like `"B1"`.
+
+### diode / resistor
+
+Inline two-lead component spliced into the harness (flyback diodes, pull resistors).
+
+- `part` (required): sourced component
+- Must have exactly 2 wires attached, referenced without a pin (`"to": "D1"`)
+- Needs a segment connecting it into the harness tree, like any node
+- `cathodeTowards` (diode only): node id the cathode band faces on the drawing
+- Typical flyback pattern: splices SP1/SP2 on the two lines, segment SP2→D1, wires SP1→D1 and D1→SP2
 
 ## segments
 
@@ -74,16 +86,27 @@ Each segment is one physical bundle run: `{ "id": "SEG1", "from": "J1", "to": "B
 
 `{ "id": "W1", "from": "J1.1", "to": "T1", "gauge": "18 AWG", "color": "red", "label": "W1", "route": ["SEG1", "SEG2"], "notes": "..." }`
 
-- Endpoints: `"J1.1"` = pin 1 of connector J1; pinless nodes (terminal/splice/breakout) are referenced by node id alone
+- Endpoints: `"J1.1"` = pin 1 of connector J1; pinless nodes (terminal/splice/breakout/diode/resistor) are referenced by node id alone
 - `route` is optional — the path through the tree is derived automatically; only set it when you want to be explicit
 - `gauge` and `color` are optional but warn when missing; always set them for manufacturing drawings
 - `color`: `black, brown, red, orange, yellow, green, blue, violet, gray, white, pink, tan`; stripe with `"base/stripe"`, e.g. `"white/blue"`
+- **Jumper (loopback)**: a wire between two pins of the same connector, e.g. `"from": "J2.2", "to": "J2.3"`. Renders as an arc at the connector face, counts as zero length, and is flagged `JUMPER` in the wire list.
 
 ## wireGroups
+
+Twisted pairs and multicore cables.
 
 `{ "id": "TW1", "wires": ["W3", "W4"], "twisted": true, "label": "TW1" }`
 
 Twisted groups render a twist symbol on the shared segment and add `TWISTED (TW1)` to the wire list rows.
+
+`{ "id": "CB1", "wires": ["W7", "W8"], "cable": true, "twisted": true, "shield": "foil", "part": { "vendor": "lcsc", "number": "C…" } }`
+
+Cable groups (`cable: true`) treat the member wires as cores of one multicore cable:
+
+- A sheath outline is drawn along every segment all cores share; `shield: "foil" | "braid"` adds a shield outline and callout
+- The BOM lists the cable (length = longest core) instead of the individual core wires; `part` sources it (optional — cable stock, like wire, may stay generic)
+- State shield termination in `notes` (e.g. "DO NOT TERMINATE SHIELD AT J2 END")
 
 ## accessories
 
@@ -104,6 +127,7 @@ npx almond-harness-studio parts fetch <files...>    # resolve part refs against 
 npx almond-harness-studio config set <key> <value>  # mouser.apiKey | digikey.clientId | digikey.clientSecret
 npx almond-harness-studio config list               # show configured keys (masked)
 npx almond-harness-studio export <file> [-o out.pdf] [--svg]
+npx almond-harness-studio tables <file> [-o dir]    # wiring table + BOM as CSV for manufacturing
 npx almond-harness-studio dev [dir] [-p port]       # live-preview viewer (default command)
 ```
 

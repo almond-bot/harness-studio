@@ -45,7 +45,13 @@ npx almond-harness-studio config set digikey.clientSecret <secret>
 npx almond-harness-studio export ./my-harness.harness.json -o ./my-harness.pdf
 ```
 
-5. For a live preview the user can watch while you iterate:
+5. If the manufacturer wants spreadsheets, export the wiring table and BOM as CSV:
+
+```bash
+npx almond-harness-studio tables ./my-harness.harness.json
+```
+
+6. For a live preview the user can watch while you iterate:
 
 ```bash
 npx almond-harness-studio dev ./harnesses-folder
@@ -55,7 +61,7 @@ Validation errors include the JSON path and an actionable message. Unresolved pa
 
 ## Data model
 
-A harness is a tree: **nodes** (connectors, terminals, splices, breakout points) joined by **segments** (bundle runs with a length and optional covering). **Wires** run from pin to pin through segments; routes are derived automatically.
+A harness is a tree: **nodes** (connectors, terminals, splices, breakout points, inline diodes/resistors) joined by **segments** (bundle runs with a length and optional covering). **Wires** run from pin to pin through segments; routes are derived automatically.
 
 ```json
 {
@@ -82,10 +88,13 @@ A harness is a tree: **nodes** (connectors, terminals, splices, breakout points)
 
 Key rules:
 
-- Every connector requires a `part` (`vendor` + `number`). Real terminals (ring/spade/ferrule/solder-cup/pin) require one too; `tinned`/`bare` are wire preparations and take none.
+- Every connector requires a `part` (`vendor` + `number`). Real terminals require one too; `tinned`/`bare` are wire preparations and take none. Connectors also take optional `contacts` (crimp contact part, BOM qty = wired cavities) and `hardware` (locks, boots, backshells).
 - Part vendors: `lcsc` (part # like `C30170181`), `mouser` (Mouser # or MPN), `digikey` (Digi-Key # or MPN)
-- Wire endpoints on connectors are `"J1.1"` (node.pin); on terminals/splices just `"T1"`
-- Terminal styles: `ring` (set `stud`), `spade`, `ferrule`, `tinned`, `bare`, `solder-cup`, `pin`
+- Wire endpoints on connectors are `"J1.1"` (node.pin); on terminals/splices/diodes/resistors just `"T1"`
+- Terminal styles: `ring` (set `stud`), `spade`, `ferrule`, `quick-connect-male`, `quick-connect-female`, `tinned`, `bare`, `solder-cup`, `pin`
+- Inline `diode`/`resistor` nodes take a `part`, exactly 2 wires, and a segment into the tree; diodes take `cathodeTowards` (node id the band faces)
+- A wire between two pins of the same connector is a jumper (loopback) — zero length, drawn as an arc
+- `wireGroups` with `cable: true` model multicore cables (optional `shield: "foil" | "braid"`, optional sourced cable `part`); with `twisted: true`, twisted pairs
 - Coverings: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none`
 - Wire colors: standard names, stripes as `"red/white"`
 - Sheets: `ANSI B` (default), `Letter`, `A3`, `A4`

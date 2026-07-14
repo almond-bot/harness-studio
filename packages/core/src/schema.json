@@ -29,7 +29,7 @@
         "required": ["id", "kind"],
         "properties": {
           "id": { "$ref": "#/definitions/id" },
-          "kind": { "enum": ["connector", "terminal", "splice", "breakout"] },
+          "kind": { "enum": ["connector", "terminal", "splice", "breakout", "diode", "resistor"] },
           "position": { "$ref": "#/definitions/position" }
         },
         "allOf": [
@@ -39,6 +39,8 @@
               "required": ["pins", "part"],
               "properties": {
                 "part": { "$ref": "#/definitions/part" },
+                "contacts": { "$ref": "#/definitions/part" },
+                "hardware": { "type": "array", "items": { "$ref": "#/definitions/part" } },
                 "pins": {
                   "type": "array",
                   "minItems": 1,
@@ -61,7 +63,17 @@
               "required": ["style"],
               "properties": {
                 "style": {
-                  "enum": ["ring", "spade", "ferrule", "tinned", "bare", "solder-cup", "pin"]
+                  "enum": [
+                    "ring",
+                    "spade",
+                    "ferrule",
+                    "quick-connect-male",
+                    "quick-connect-female",
+                    "tinned",
+                    "bare",
+                    "solder-cup",
+                    "pin"
+                  ]
                 },
                 "stud": { "type": "string" },
                 "part": { "$ref": "#/definitions/part" }
@@ -71,7 +83,13 @@
           {
             "if": { "properties": { "kind": { "const": "terminal" } }, "required": ["kind"] },
             "then": {
-              "if": { "properties": { "style": { "enum": ["ring", "spade", "ferrule", "solder-cup", "pin"] } } },
+              "if": {
+                "properties": {
+                  "style": {
+                    "enum": ["ring", "spade", "ferrule", "quick-connect-male", "quick-connect-female", "solder-cup", "pin"]
+                  }
+                }
+              },
               "then": { "required": ["part"] }
             }
           },
@@ -81,6 +99,16 @@
               "properties": {
                 "method": { "enum": ["crimp", "solder", "ultrasonic"] },
                 "part": { "$ref": "#/definitions/part" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "enum": ["diode", "resistor"] } }, "required": ["kind"] },
+            "then": {
+              "required": ["part"],
+              "properties": {
+                "part": { "$ref": "#/definitions/part" },
+                "cathodeTowards": { "$ref": "#/definitions/id" }
               }
             }
           }
@@ -131,6 +159,9 @@
           "id": { "type": "string" },
           "wires": { "type": "array", "minItems": 2, "items": { "$ref": "#/definitions/id" } },
           "twisted": { "type": "boolean" },
+          "cable": { "type": "boolean" },
+          "part": { "$ref": "#/definitions/part" },
+          "shield": { "enum": ["none", "foil", "braid"] },
           "label": { "type": "string" }
         }
       }

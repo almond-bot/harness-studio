@@ -1,5 +1,12 @@
-import type { Harness, PartsCache, ResolvedPart, SheetSize, TerminalNode } from "./types.js";
-import { partKey } from "./types.js";
+import type {
+  Harness,
+  InlineComponentNode,
+  PartsCache,
+  ResolvedPart,
+  SheetSize,
+  TerminalNode,
+} from "./types.js";
+import { parseEndpoint, partKey } from "./types.js";
 import { layoutHarness, CONNECTOR_HEADER, PIN_ROW, type LayoutResult, type NodeBox, type Point } from "./layout.js";
 import { parseWireColor } from "./colors.js";
 import { buildBom, buildWireList } from "./bom.js";
@@ -107,6 +114,8 @@ function terminalShortDesc(node: TerminalNode): string {
     ring: "RING",
     spade: "SPADE",
     ferrule: "FERRULE",
+    "quick-connect-male": "QC MALE",
+    "quick-connect-female": "QC FEMALE",
     tinned: "TINNED",
     bare: "BARE",
     "solder-cup": "SOLDER CUP",
@@ -159,6 +168,24 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
         );
       }
       break;
+    case "quick-connect-male": {
+      // Flat blade with the crimp barrel behind it
+      const bx = symX - (tailDir > 0 ? 20 : 0);
+      parts.push(
+        `<rect x="${fmt(bx + (tailDir > 0 ? 12 : 0))}" y="${fmt(cy - 5)}" width="8" height="10" ${stroke}/>`,
+        `<rect x="${fmt(bx + (tailDir > 0 ? 0 : 8))}" y="${fmt(cy - 2.5)}" width="12" height="5" fill="#111"/>`
+      );
+      break;
+    }
+    case "quick-connect-female": {
+      // Open receptacle sleeve
+      const fx = symX - (tailDir > 0 ? 18 : 0);
+      parts.push(
+        `<rect x="${fmt(fx)}" y="${fmt(cy - 6)}" width="18" height="12" rx="2" ${stroke}/>`,
+        `<line x1="${fmt(symX - tailDir * 18)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 12)}" y2="${fmt(cy)}" stroke="#111" stroke-width="1.5"/>`
+      );
+      break;
+    }
     case "solder-cup":
       parts.push(
         `<path d="M ${fmt(symX)} ${fmt(cy - 6)} A 6 6 0 1 ${tailDir > 0 ? 0 : 1} ${fmt(symX)} ${fmt(cy + 6)}" ${stroke}/>`
@@ -173,6 +200,50 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
   const labelX = box.x + box.width / 2;
   const desc = resolved?.mpn ? `${terminalShortDesc(node)} · ${resolved.mpn}` : terminalShortDesc(node);
   parts.push(text(labelX, box.y + box.height + 6, `${node.id} · ${desc}`, { size: 9, weight: "bold", anchor: "middle" }));
+  return parts.join("\n");
+}
+
+function renderInlineComponent(box: NodeBox, layout: LayoutResult, resolved?: ResolvedPart): string {
+  const node = box.node as InlineComponentNode;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const parts: string[] = [];
+  const stroke = `stroke="#111" stroke-width="1.5"`;
+
+  // Lead stubs to the box edges so incoming wires meet the symbol
+  parts.push(
+    `<line x1="${fmt(box.x)}" y1="${fmt(cy)}" x2="${fmt(cx - 12)}" y2="${fmt(cy)}" ${stroke}/>`,
+    `<line x1="${fmt(cx + 12)}" y1="${fmt(cy)}" x2="${fmt(box.x + box.width)}" y2="${fmt(cy)}" ${stroke}/>`
+  );
+
+  if (node.kind === "diode") {
+    // Cathode band faces `cathodeTowards` (default: pointing right, away from root)
+    const target = node.cathodeTowards ? layout.boxes.get(node.cathodeTowards) : undefined;
+    const pointLeft = target ? target.x + target.width / 2 < cx : false;
+    const dir = pointLeft ? -1 : 1;
+    const tipX = cx + dir * 10;
+    const baseX = cx - dir * 10;
+    parts.push(
+      `<path d="M ${fmt(baseX)} ${fmt(cy - 9)} L ${fmt(baseX)} ${fmt(cy + 9)} L ${fmt(tipX)} ${fmt(cy)} Z" fill="white" ${stroke}/>`,
+      `<line x1="${fmt(tipX)}" y1="${fmt(cy - 9)}" x2="${fmt(tipX)}" y2="${fmt(cy + 9)}" stroke="#111" stroke-width="2"/>`
+    );
+  } else {
+    // Zigzag resistor
+    const w = 24;
+    const x0 = cx - w / 2;
+    const step = w / 6;
+    let d = `M ${fmt(x0)} ${fmt(cy)}`;
+    for (let i = 0; i < 6; i++) {
+      const px = x0 + step * (i + 0.5);
+      const py = cy + (i % 2 === 0 ? -8 : 8);
+      d += ` L ${fmt(px)} ${fmt(py)}`;
+    }
+    d += ` L ${fmt(x0 + w)} ${fmt(cy)}`;
+    parts.push(`<path d="${d}" fill="none" ${stroke} stroke-linejoin="round"/>`);
+  }
+
+  const desc = resolved?.mpn ?? node.kind.toUpperCase();
+  parts.push(text(cx, box.y - 6, `${node.id} · ${desc}`, { size: 8.5, weight: "bold", anchor: "middle" }));
   return parts.join("\n");
 }
 
@@ -204,7 +275,7 @@ function renderPartPhoto(box: NodeBox, resolved: ResolvedPart | undefined): stri
   );
 }
 
-function renderNode(box: NodeBox, partsCache: PartsCache): string {
+function renderNode(box: NodeBox, layout: LayoutResult, partsCache: PartsCache): string {
   const node = box.node;
   const parts: string[] = [];
   if (node.kind === "connector") {
@@ -248,6 +319,9 @@ function renderNode(box: NodeBox, partsCache: PartsCache): string {
     parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="6" fill="#111"/>`);
     const label = node.method ? `${node.id} (${node.method.toUpperCase()})` : node.id;
     parts.push(text(cx, box.y - 4, label, { size: 8.5, weight: "bold", anchor: "middle" }));
+  } else if (node.kind === "diode" || node.kind === "resistor") {
+    const resolved = resolvedFor(node, partsCache);
+    parts.push(renderInlineComponent(box, layout, resolved));
   } else {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
@@ -314,7 +388,20 @@ function renderWires(harness: Harness, layout: LayoutResult): string {
     const path = layout.wirePaths.get(wire.id);
     if (!path || path.points.length < 2) continue;
     const color = parseWireColor(wire.color);
-    const d = polylinePath(path.points);
+    const fromRef = parseEndpoint(wire.from);
+    const toRef = parseEndpoint(wire.to);
+    let d: string;
+    if (fromRef.nodeId === toRef.nodeId) {
+      // Jumper (loopback): arc bulging away from the connector face
+      const a = path.points[0];
+      const b = path.points[path.points.length - 1];
+      const box = layout.boxes.get(fromRef.nodeId);
+      const bulge = box && !box.facesRight ? -22 : 22;
+      const midY = (a.y + b.y) / 2;
+      d = `M ${fmt(a.x)} ${fmt(a.y)} Q ${fmt(a.x + bulge)} ${fmt(midY)} ${fmt(b.x)} ${fmt(b.y)}`;
+    } else {
+      d = polylinePath(path.points);
+    }
     const light = color.base === "#f2f2f2" || color.base === "#e6c700";
     if (light) {
       parts.push(`<path d="${d}" fill="none" stroke="#999" stroke-width="3" stroke-linejoin="round"/>`);
@@ -331,10 +418,52 @@ function renderWires(harness: Harness, layout: LayoutResult): string {
   return parts.join("\n");
 }
 
+/**
+ * Multicore cable sheaths: an outline drawn along every segment all cores
+ * share, with the cable label. Shielded cables get a second dashed outline.
+ */
+function renderCableSheaths(harness: Harness, layout: LayoutResult): string {
+  const parts: string[] = [];
+  (harness.wireGroups ?? []).forEach((group, i) => {
+    if (!group.cable) return;
+    const label = group.label ?? group.id ?? `CB${i + 1}`;
+    const routes = group.wires.map((w) => layout.wirePaths.get(w)?.routeSegments ?? []);
+    const sharedSegs = (routes[0] ?? []).filter((segId) => routes.every((r) => r.includes(segId)));
+    const shielded = group.shield && group.shield !== "none";
+    sharedSegs.forEach((segId, s) => {
+      const line = layout.segmentLines.get(segId);
+      if (!line) return;
+      const dx = line.to.x - line.from.x;
+      const dy = line.to.y - line.from.y;
+      const len = Math.hypot(dx, dy);
+      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const h = Math.max(14, line.wires.length * 4 + 10);
+      const inset = 10;
+      parts.push(
+        `<g transform="translate(${fmt(line.from.x)} ${fmt(line.from.y)}) rotate(${fmt(angle)})">` +
+          `<rect x="${fmt(inset)}" y="${fmt(-h / 2)}" width="${fmt(len - inset * 2)}" height="${h}" rx="${fmt(h / 2)}" fill="none" stroke="#111" stroke-width="1.5"/>` +
+          (shielded
+            ? `<rect x="${fmt(inset + 3)}" y="${fmt(-h / 2 + 3)}" width="${fmt(len - inset * 2 - 6)}" height="${h - 6}" rx="${fmt((h - 6) / 2)}" fill="none" stroke="#555" stroke-width="0.75" stroke-dasharray="3 2"/>`
+            : "") +
+          (s === 0
+            ? `<rect x="${fmt(len / 2 - 34)}" y="${fmt(-h / 2 - 16)}" width="68" height="12" fill="white" stroke="#111" stroke-width="0.75"/>` +
+              text(len / 2, -h / 2 - 7, shielded ? `${label} · ${group.shield!.toUpperCase()} SHLD` : label, {
+                size: 7.5,
+                weight: "bold",
+                anchor: "middle",
+              })
+            : "") +
+          `</g>`
+      );
+    });
+  });
+  return parts.join("\n");
+}
+
 function renderTwistMarks(harness: Harness, layout: LayoutResult): string {
   const parts: string[] = [];
   (harness.wireGroups ?? []).forEach((group, i) => {
-    if (!group.twisted) return;
+    if (!group.twisted || group.cable) return;
     const label = group.label ?? group.id ?? `TW${i + 1}`;
     // Find a segment shared by all wires in the group
     const routes = group.wires.map((w) => layout.wirePaths.get(w)?.routeSegments ?? []);
@@ -539,8 +668,9 @@ export function renderHarnessSvg(harness: Harness): RenderResult {
   parts.push(`<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(scale)})">`);
   parts.push(renderSegments(layout));
   parts.push(renderWires(harness, layout));
+  parts.push(renderCableSheaths(harness, layout));
   parts.push(renderTwistMarks(harness, layout));
-  for (const box of layout.boxes.values()) parts.push(renderNode(box, partsCache));
+  for (const box of layout.boxes.values()) parts.push(renderNode(box, layout, partsCache));
   parts.push(`</g>`);
 
   parts.push(

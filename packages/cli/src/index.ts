@@ -11,6 +11,8 @@ import {
   collectPartRefs,
   formatSource,
   partKey,
+  buildBom,
+  buildWireList,
   type Harness,
   type PartsCache,
 } from "@almond-harness-studio/core";
@@ -109,6 +111,62 @@ program
       stream.on("error", reject);
     });
     console.log(`✓ wrote ${out}`);
+  });
+
+function csv(rows: string[][]): string {
+  const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  return rows.map((r) => r.map(cell).join(",")).join("\n") + "\n";
+}
+
+program
+  .command("tables")
+  .description("Export the wiring table and BOM as CSV files for manufacturing")
+  .argument("<file>", "harness JSON file")
+  .option("-o, --out-dir <dir>", "output directory (default: alongside the input)")
+  .action(async (file: string, opts: { outDir?: string }) => {
+    const raw = await fs.readFile(file, "utf8");
+    const { harness, ok } = loadAndValidate(file, raw);
+    if (!ok || !harness) process.exit(1);
+
+    const base = path.basename(file).replace(/\.harness\.json$|\.json$/, "");
+    const dir = opts.outDir ?? path.dirname(file);
+    await fs.mkdir(dir, { recursive: true });
+
+    // Partner wires per wire (twisted groups), like harness.design's "Twisted With"
+    const twistedWith = new Map<string, string[]>();
+    for (const group of harness.wireGroups ?? []) {
+      if (!group.twisted) continue;
+      for (const w of group.wires) {
+        twistedWith.set(w, group.wires.filter((x) => x !== w));
+      }
+    }
+
+    const wiring = buildWireList(harness);
+    const wiringCsv = csv([
+      ["Wire", "From", "To", "Gauge", "Color", "Length (mm)", "Twisted With", "Notes"],
+      ...wiring.map((row, i) => [
+        row.wire,
+        row.from,
+        row.to,
+        row.gauge,
+        row.color,
+        String(row.lengthMm),
+        (twistedWith.get(harness.wires[i].id) ?? []).join(" "),
+        row.notes,
+      ]),
+    ]);
+    const wiringPath = path.join(dir, `${base}.wiring.csv`);
+    await fs.writeFile(wiringPath, wiringCsv, "utf8");
+    console.log(`✓ wrote ${wiringPath}`);
+
+    const bom = buildBom(harness, harness.parts ?? {});
+    const bomCsv = csv([
+      ["Item", "Qty", "Part Number", "Description", "Manufacturer", "Source"],
+      ...bom.map((r) => [String(r.item), r.qty, r.mpn, r.description, r.manufacturer, r.source]),
+    ]);
+    const bomPath = path.join(dir, `${base}.bom.csv`);
+    await fs.writeFile(bomPath, bomCsv, "utf8");
+    console.log(`✓ wrote ${bomPath}`);
   });
 
 const parts = program.command("parts").description("Source components from LCSC, Mouser, and Digi-Key");

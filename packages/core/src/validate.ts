@@ -172,6 +172,32 @@ export function validateHarness(data: unknown): ValidationResult {
         });
       }
     }
+    if ((group.part || group.shield) && !group.cable) {
+      errors.push({
+        path: `/wireGroups/${i}`,
+        message: `wire group has ${group.part ? "a cable part" : "a shield"} but "cable" is not true`,
+      });
+    }
+  });
+
+  // Inline components (diodes/resistors) are two-lead devices
+  harness.nodes.forEach((node, i) => {
+    if (node.kind !== "diode" && node.kind !== "resistor") return;
+    const attached = harness.wires.filter(
+      (w) => parseEndpoint(w.from).nodeId === node.id || parseEndpoint(w.to).nodeId === node.id
+    ).length;
+    if (attached !== 2) {
+      errors.push({
+        path: `/nodes/${i}`,
+        message: `${node.kind} "${node.id}" must have exactly 2 wires attached (has ${attached})`,
+      });
+    }
+    if (node.kind === "diode" && node.cathodeTowards && !nodeById.has(node.cathodeTowards)) {
+      errors.push({
+        path: `/nodes/${i}/cathodeTowards`,
+        message: `diode "${node.id}" cathodeTowards references unknown node "${node.cathodeTowards}"`,
+      });
+    }
   });
 
   if (harness.layout?.root && !nodeById.has(harness.layout.root)) {
