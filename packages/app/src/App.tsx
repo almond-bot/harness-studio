@@ -437,6 +437,16 @@ export function App() {
                   ? "Opened files live-reload as you (or your agent) save them."
                   : "Drop a file anywhere to preview it. For live reload, use Chrome/Edge or run the CLI locally."}
               </p>
+              <p className="get-started">
+                New here?{" "}
+                <a
+                  href="https://github.com/almond-bot/harness-studio"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Get started
+                </a>
+              </p>
             </div>
           </>
         )}
@@ -554,6 +564,18 @@ export function App() {
                 <button className="open-file big" onClick={() => void pickFolder()}>
                   Open folder
                 </button>
+              )}
+              {!server.connected && (
+                <p className="get-started">
+                  New here?{" "}
+                  <a
+                    href="https://github.com/almond-bot/harness-studio"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Get started
+                  </a>
+                </p>
               )}
             </div>
           )
