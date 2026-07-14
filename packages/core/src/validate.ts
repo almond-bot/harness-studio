@@ -200,6 +200,20 @@ export function validateHarness(data: unknown): ValidationResult {
     }
   });
 
+  // Face views reference the connector's own pins
+  harness.nodes.forEach((node, i) => {
+    if (node.kind !== "connector" || !node.face) return;
+    const pinIds = new Set(node.pins.map((p) => p.id));
+    node.face.pins.forEach((fp, j) => {
+      if (!pinIds.has(fp.pin)) {
+        errors.push({
+          path: `/nodes/${i}/face/pins/${j}`,
+          message: `face view of "${node.id}" references unknown pin "${fp.pin}" (pins: ${node.pins.map((p) => p.id).join(", ")})`,
+        });
+      }
+    });
+  });
+
   if (harness.layout?.root && !nodeById.has(harness.layout.root)) {
     errors.push({
       path: "/layout/root",

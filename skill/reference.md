@@ -47,6 +47,22 @@ All nodes: `id` (unique, `[A-Za-z0-9_-]+`), `kind`, optional `position` `{x, y}`
 - `pins` (required): array of `{ "id": "1", "label": "BAT+" }`. Pin ids are strings — `"S1"`, `"A"` are fine.
 - `contacts`: crimp contact part; BOM quantity = number of wired cavities
 - `hardware`: array of parts for locks, boots, backshells, dust covers (one BOM line each)
+- `face`: renders an "ASSEMBLY DETAIL" card (product photo + face view of the real pin pattern, each cavity filled in its wire's color) — this is how an operator orients an asymmetric connector in hand and sees which way the wires bend. Author pin positions from the part's datasheet drawing:
+
+```json
+{ "view": "wire-side", "wireBend": "down", "note": "PCB PROVIDED BY CUSTOMER",
+  "pins": [
+    { "pin": "1", "x": 0, "y": 0, "size": 1.7 },
+    { "pin": "2", "x": 10, "y": 0, "size": 1.7 },
+    { "pin": "S1", "x": 15.5, "y": 3.2, "size": 0.9 },
+    { "pin": "S2", "x": 15.5, "y": -3.2, "size": 0.9 }
+  ] }
+```
+
+  - `pins` (required): one entry per drawn cavity; `pin` references the connector's pin ids, `x`/`y` are relative positions in any consistent unit (+y is up, the view auto-scales), `size` scales the marker (e.g. 1.7 for power pins, 0.9 for signal pins)
+  - `wireBend`: direction the wires bend after leaving the connector, in this view's frame — `up`, `down`, `left`, `right`. Drawn as a bold arrow and stated in the caption.
+  - `view`: `wire-side` (default — the face the operator solders/crimps at) or `mating-side`. Mind the mirror flip: the same pattern viewed from the wire side is left-right mirrored vs the mating side.
+  - `note`: caption under the detail. State tolerances and covering extent in top-level `notes`.
 
 ### terminal
 

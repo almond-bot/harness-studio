@@ -9,26 +9,26 @@ Wire harness drawings from JSON. Design harnesses as `*.harness.json` files (by 
 
 ## Quickstart
 
-```bash
-npm install && npm run build
+No install needed — run everything with `npx`:
 
+```bash
 # live-preview viewer over a folder of harness files
-node packages/cli/dist/index.js dev ./examples
+npx almond-harness-studio dev ./harnesses
 
 # validate
-node packages/cli/dist/index.js validate examples/*.harness.json
+npx almond-harness-studio validate my-harness.harness.json
 
 # pull distributor data (MPN, photo, price) for every referenced part
-node packages/cli/dist/index.js parts fetch examples/branched-battery-pigtail.harness.json
+npx almond-harness-studio parts fetch my-harness.harness.json
 
 # headless vector PDF export (no browser needed)
-node packages/cli/dist/index.js export examples/branched-battery-pigtail.harness.json -o harness.pdf
+npx almond-harness-studio export my-harness.harness.json -o harness.pdf
 
 # wiring table + BOM as CSV
-node packages/cli/dist/index.js tables examples/branched-battery-pigtail.harness.json
+npx almond-harness-studio tables my-harness.harness.json
 ```
 
-Once the packages are published to npm, the same commands run anywhere as `npx almond-harness-studio <cmd>` — no clone needed.
+Or install globally with `npm install -g almond-harness-studio`.
 
 ## The format in 30 seconds
 
@@ -50,16 +50,16 @@ Components are always real, orderable parts referenced by distributor part numbe
 }
 ```
 
-Supported today: multi-branch harnesses, twisted pairs and shielded multicore cables (`wireGroups`), ring/spade/ferrule/quick-connect/tinned/bare/solder-cup/pin terminations, splices, inline diodes and resistors (flyback diodes, pull resistors), jumper (loopback) wires, connector crimp contacts and hardware (locks/boots/backshells), heatshrink / PET braid / split loom / spiral wrap coverings, striped wire colors, per-node layout overrides, and CSV wiring-table/BOM export (`tables`).
+Supported today: multi-branch harnesses, twisted pairs and shielded multicore cables (`wireGroups`), ring/spade/ferrule/quick-connect/tinned/bare/solder-cup/pin terminations, splices, inline diodes and resistors (flyback diodes, pull resistors), jumper (loopback) wires, connector crimp contacts and hardware (locks/boots/backshells), connector assembly details (`face`: real pin pattern with wire colors and bend direction), heatshrink / PET braid / split loom / spiral wrap coverings, striped wire colors, per-node layout overrides, and CSV wiring-table/BOM export (`tables`).
 
 ### Part sourcing
 
 `parts fetch` resolves every `part` reference against the distributor and embeds the record under the file's top-level `parts` object — drawings then render offline with product photos and a sourced BOM. LCSC needs no API key; Mouser and Digi-Key keys are yours:
 
 ```bash
-node packages/cli/dist/index.js config set mouser.apiKey <key>          # mouser.com/api-hub
-node packages/cli/dist/index.js config set digikey.clientId <id>        # developer.digikey.com
-node packages/cli/dist/index.js config set digikey.clientSecret <secret>
+npx almond-harness-studio config set mouser.apiKey <key>          # mouser.com/api-hub
+npx almond-harness-studio config set digikey.clientId <id>        # developer.digikey.com
+npx almond-harness-studio config set digikey.clientSecret <secret>
 ```
 
 Keys live in `~/.config/almond-harness-studio/config.json` (or `MOUSER_API_KEY`, `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET` env vars). The viewer also has an "API keys…" dialog — keys stay in the browser's localStorage and part lookups go through your local dev server.
@@ -112,6 +112,7 @@ No environment variables or serverless functions are needed — the viewer is fu
 ## Development
 
 ```bash
+npm install
 npm run dev             # Vite dev server with HMR, API backed by ./examples
 npm run typecheck
 npm run build
@@ -119,15 +120,6 @@ npm run check:examples  # validates all example harnesses
 ```
 
 Point the dev viewer at a private data folder: `ALMOND_DATA_DIR=/path/to/harnesses npm run dev`.
-
-### Releasing to npm
-
-Three packages ship together, same version: `@almond-harness-studio/core`, `@almond-harness-studio/app`, and the CLI `almond-harness-studio` (which bundles the viewer for `dev`). From a clean checkout:
-
-```bash
-npm ci && npm run build && npm run check:examples
-npm publish -w @almond-harness-studio/core -w @almond-harness-studio/app -w almond-harness-studio
-```
 
 ## License
 

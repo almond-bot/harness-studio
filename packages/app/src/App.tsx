@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collectPartRefs, partKey } from "@almond-harness-studio/core";
+import { collectPartRefs, partKey } from "@almond-bot/harness-studio-core";
 import { Preview } from "./Preview";
 import {
   fetchHarnessFile,

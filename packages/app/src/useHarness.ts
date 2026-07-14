@@ -4,7 +4,7 @@ import {
   renderHarnessSvg,
   type Harness,
   type ValidationIssue,
-} from "@almond-harness-studio/core";
+} from "@almond-bot/harness-studio-core";
 
 export interface LoadedHarness {
   sourceName: string;

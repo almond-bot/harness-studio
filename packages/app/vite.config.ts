@@ -21,7 +21,7 @@ export default defineConfig({
   plugins: [react(), harnessApi()],
   resolve: {
     alias: {
-      "@almond-harness-studio/core": path.resolve(here, "../core/src/index.ts"),
+      "@almond-bot/harness-studio-core": path.resolve(here, "../core/src/index.ts"),
     },
   },
 });

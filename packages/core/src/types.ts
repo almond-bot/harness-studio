@@ -58,6 +58,31 @@ export interface Position {
   y: number;
 }
 
+/** Pin position on the connector face, in arbitrary units (+y is up; the view scales to fit). */
+export interface FacePin {
+  /** Pin id from the connector's `pins` */
+  pin: string;
+  x: number;
+  y: number;
+  /** Relative marker size, 1 = standard (e.g. 1.7 for power pins, 0.9 for signal pins) */
+  size?: number;
+}
+
+/**
+ * Face view of the connector: the real pin pattern (so an operator can orient
+ * the part in hand), each cavity colored by its attached wire, and the
+ * direction wires bend in this view's frame.
+ */
+export interface ConnectorFace {
+  /** Which face the view shows (default "wire-side" — where the operator solders/crimps) */
+  view?: "wire-side" | "mating-side";
+  pins: FacePin[];
+  /** Direction the wires bend after leaving the connector, in this view's frame */
+  wireBend?: "up" | "down" | "left" | "right";
+  /** Extra caption under the detail, e.g. "PCB PROVIDED BY CUSTOMER" */
+  note?: string;
+}
+
 export interface ConnectorNode {
   id: string;
   kind: "connector";
@@ -68,6 +93,8 @@ export interface ConnectorNode {
   contacts?: PartRef;
   /** Locks, boots, backshells, dust covers — one BOM line each */
   hardware?: PartRef[];
+  /** Pin-pattern face view with wire colors and bend direction */
+  face?: ConnectorFace;
   position?: Position;
 }
 

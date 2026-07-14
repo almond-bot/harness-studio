@@ -16,6 +16,17 @@
         "vendor": "lcsc",
         "number": "C30170181"
       },
+      "face": {
+        "view": "wire-side",
+        "wireBend": "down",
+        "note": "PCB PROVIDED BY CUSTOMER (NOT IN BOM)",
+        "pins": [
+          { "pin": "1", "x": 0, "y": 0, "size": 1.7 },
+          { "pin": "2", "x": 10, "y": 0, "size": 1.7 },
+          { "pin": "S1", "x": 15.5, "y": 3.2, "size": 0.9 },
+          { "pin": "S2", "x": 15.5, "y": -3.2, "size": 0.9 }
+        ]
+      },
       "pins": [
         {
           "id": "1",
