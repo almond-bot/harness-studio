@@ -129,6 +129,28 @@ export function layoutHarness(harness: Harness): LayoutResult {
     }
   }
 
+  // When the root is a single-ended leaf (a plain cable end), other leaf ends
+  // hanging off the same hub belong at the root's end of the drawing, not a
+  // column deeper. Pull them back into the root's column so both ends of a
+  // cable fan symmetrically — but only while the hub continues onward; a hub
+  // whose children are all leaves is a genuine rightward breakout.
+  const rootKids = children.get(rootId) ?? [];
+  let leftLeaves: string[] = [];
+  let leftHub: string | null = null;
+  if (rootKids.length === 1) {
+    const hub = rootKids[0];
+    const hubKids = children.get(hub) ?? [];
+    const leaves = hubKids.filter((c) => (children.get(c) ?? []).length === 0);
+    if (leaves.length > 0 && leaves.length < hubKids.length) {
+      leftLeaves = leaves;
+      leftHub = hub;
+      children.set(
+        hub,
+        hubKids.filter((c) => !leaves.includes(c))
+      );
+    }
+  }
+
   // Depth per node, max width per depth column
   const depth = new Map<string, number>();
   const assignDepth = (id: string, d: number) => {
@@ -136,6 +158,7 @@ export function layoutHarness(harness: Harness): LayoutResult {
     for (const child of children.get(id) ?? []) assignDepth(child, d + 1);
   };
   assignDepth(rootId, 0);
+  for (const id of leftLeaves) depth.set(id, 0);
 
   const maxDepth = Math.max(...[...depth.values()], 0);
   const columnWidth: number[] = [];
@@ -169,6 +192,25 @@ export function layoutHarness(harness: Harness): LayoutResult {
   };
   place(rootId);
 
+  if (leftHub) {
+    // Stack the root and the pulled-back leaves at the left end, centered on
+    // the hub, in the hub's segment declaration order
+    const order: string[] = [];
+    for (const seg of harness.segments) {
+      const other = seg.from === leftHub ? seg.to : seg.to === leftHub ? seg.from : null;
+      if (other && (other === rootId || leftLeaves.includes(other)) && !order.includes(other)) {
+        order.push(other);
+      }
+    }
+    const heights = order.map((id) => nodeSize(nodeById.get(id)!).height);
+    const total = heights.reduce((a, b) => a + b, 0) + V_GAP * (order.length - 1);
+    let yTop = (centerY.get(leftHub) ?? 0) - total / 2;
+    order.forEach((id, i) => {
+      centerY.set(id, yTop + heights[i] / 2);
+      yTop += heights[i] + V_GAP;
+    });
+  }
+
   const boxes = new Map<string, NodeBox>();
   for (const node of harness.nodes) {
     const { width, height } = nodeSize(node);
@@ -177,7 +219,7 @@ export function layoutHarness(harness: Harness): LayoutResult {
     const autoY = (centerY.get(node.id) ?? 0) - height / 2;
     const x = node.position?.x ?? autoX;
     const y = node.position?.y ?? autoY;
-    const facesRight = node.id === rootId;
+    const facesRight = node.id === rootId || leftLeaves.includes(node.id);
 
     const pinAnchors = new Map<string, Point>();
     if (node.kind === "connector") {

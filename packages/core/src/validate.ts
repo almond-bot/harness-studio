@@ -245,9 +245,13 @@ export function validateHarness(data: unknown): ValidationResult {
     });
   }
 
-  const connectorCount = harness.nodes.filter((n) => n.kind === "connector").length;
-  if (connectorCount === 0) {
-    warnings.push({ path: "/nodes", message: "harness has no connectors" });
+  // A cable terminated only in bare/tinned ends is legitimate; only warn when
+  // the harness has no terminations at all (neither connectors nor terminals)
+  const terminationCount = harness.nodes.filter(
+    (n) => n.kind === "connector" || n.kind === "terminal"
+  ).length;
+  if (terminationCount === 0) {
+    warnings.push({ path: "/nodes", message: "harness has no connectors or terminals" });
   }
   harness.wires.forEach((wire, i) => {
     if (!wire.gauge) warnings.push({ path: `/wires/${i}`, message: `wire "${wire.id}" has no gauge` });
