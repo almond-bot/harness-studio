@@ -69,6 +69,7 @@ All nodes: `id` (unique, `[A-Za-z0-9_-]+`), `kind`, optional `position` `{x, y}`
 - `style` (required): `ring`, `spade`, `ferrule`, `quick-connect-male`, `quick-connect-female`, `tinned`, `bare`, `solder-cup`, `pin`
 - `stud`: for ring/spade, e.g. `"M4"` or `"#10"`
 - `part`: required for real parts; omitted only for wire preparations (`tinned`, `bare`)
+- `stripMm`: insulation strip length at this end, e.g. `"stripMm": 10`. Dimensioned on the drawing (`STRIP 10 mm` over the exposed conductor) for `bare`/`tinned` ends and noted in the wire list (`STRIP 10 MM AT T1`) for every style. Use this rather than a 10 mm segment or a sheet note to show strip length.
 
 ### splice
 
@@ -96,7 +97,7 @@ Each segment is one physical bundle run: `{ "id": "SEG1", "from": "J1", "to": "B
 
 - The segment graph must be a connected tree (no cycles, no islands)
 - `lengthMm`: run length; wire lengths and covering quantities are derived from it
-- `covering`: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none`
+- `covering`: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none` — sleeves the whole bundle on this run. For a piece over one wire only (heatshrink on a single solder joint), use the wire's `endCoverings` instead.
 
 ## wires
 
@@ -107,6 +108,7 @@ Each segment is one physical bundle run: `{ "id": "SEG1", "from": "J1", "to": "B
 - `gauge` and `color` are optional but warn when missing; always set them for manufacturing drawings
 - `color`: `black, brown, red, orange, yellow, green, blue, violet, gray, white, pink, tan`; stripe with `"base/stripe"`, e.g. `"white/blue"`
 - **Jumper (loopback)**: a wire between two pins of the same connector, e.g. `"from": "J2.2", "to": "J2.3"`. Renders as an arc at the connector face, counts as zero length, and is flagged `JUMPER` in the wire list.
+- **Per-wire end coverings**: `"endCoverings": { "from": { "covering": "heatshrink", "lengthMm": 10 }, "to": { … } }` puts a short piece of covering on this wire alone at its `from`/`to` termination — e.g. heatshrink over a solder joint at a connector pin, applied individually per wire. Use this instead of a covered segment whenever wires that share a bundle need their own pieces (a segment `covering` sleeves the whole bundle). Rendered as a sleeve on the wire's lead right at the node with a `HEATSHRINK 10 mm` callout, added to the covering totals in the BOM, and noted in the wire list (`HEATSHRINK 10 MM AT J1`). Not allowed on jumpers.
 
 ## wireGroups
 
@@ -130,8 +132,8 @@ Extra sourced BOM rows: `{ "part": { "vendor": "lcsc", "number": "C2837172" }, "
 
 ## Derived outputs (do not author)
 
-- **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color, covering totals by type, then accessories
-- **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), twist notes
+- **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color, covering totals by type (segment coverings plus per-wire end coverings), then accessories
+- **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), twist and end-covering notes
 - **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left
 - **`parts`**: distributor data embedded by `parts fetch`; product photos render on the drawing
 

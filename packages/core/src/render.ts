@@ -47,6 +47,8 @@ interface ThemeColors {
   shieldFoilFg: string;
   cableJacket: string;
   cableInner: string;
+  /** Exposed conductor at stripped bare ends */
+  copper: string;
   /** Wire base colors that need a contrast outline against the paper */
   outlinedWires: string[];
   wireOutline: string;
@@ -76,6 +78,7 @@ const THEMES: Record<RenderTheme, ThemeColors> = {
     shieldFoilFg: "#9a9a9a",
     cableJacket: "#4a4a4a",
     cableInner: "#f6f6f6",
+    copper: "#b87333",
     outlinedWires: ["#f2f2f2", "#e6c700"],
     wireOutline: "#999",
   },
@@ -102,6 +105,7 @@ const THEMES: Record<RenderTheme, ThemeColors> = {
     shieldFoilFg: "#808084",
     cableJacket: "#7a7a7e",
     cableInner: "#222226",
+    copper: "#d08a4a",
     outlinedWires: ["#1a1a1a", "#7b4a12"],
     wireOutline: "#8a8a8a",
   },
@@ -158,9 +162,13 @@ function fitText(value: string, widthPx: number, fontSize: number): string {
   return value.slice(0, Math.max(1, maxChars - 1)).trimEnd() + "…";
 }
 
-/** Word-wrap to fit a pixel width; words longer than a line are hard-broken. */
+/**
+ * Word-wrap to fit a pixel width; words longer than a line are hard-broken.
+ * Notes are uppercase, which runs wider than mixed case, so the per-character
+ * estimate is deliberately conservative.
+ */
 function wrapText(value: string, widthPx: number, fontSize: number): string[] {
-  const maxChars = Math.max(8, Math.floor(widthPx / (fontSize * 0.56)));
+  const maxChars = Math.max(8, Math.floor(widthPx / (fontSize * 0.62)));
   const lines: string[] = [];
   let current = "";
   for (const word of value.split(/\s+/)) {
@@ -275,6 +283,10 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
   const tailDir = box.facesRight ? 1 : -1;
   const parts: string[] = [];
   const stroke = `stroke="${T.ink}" stroke-width="1.5" fill="none"`;
+  // Exposed-conductor length for bare/tinned ends; drawn longer when the strip
+  // length is dimensioned so the callout has something legible to point at
+  const stripped = node.stripMm !== undefined && (node.style === "bare" || node.style === "tinned");
+  const conductorLen = stripped ? 30 : node.style === "tinned" ? 18 : 16;
 
   parts.push(
     `<line x1="${fmt(anchorX)}" y1="${fmt(cy)}" x2="${fmt(symX)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="1.5"/>`
@@ -300,16 +312,25 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
       break;
     case "tinned":
       parts.push(
-        `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 18)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="3.5"/>`
+        `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * conductorLen)}" y2="${fmt(cy)}" stroke="${T.ink}" stroke-width="3.5"/>`
       );
       break;
-    case "bare":
+    case "bare": {
+      // Stripped conductor: a bare-copper run that frays into strands at the tip
+      const fray = stripped ? 12 : conductorLen;
+      const solidEnd = symX - tailDir * Math.max(0, conductorLen - fray);
+      if (conductorLen > fray) {
+        parts.push(
+          `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(solidEnd)}" y2="${fmt(cy)}" stroke="${T.copper}" stroke-width="3"/>`
+        );
+      }
       for (const dy of [-5, 0, 5]) {
         parts.push(
-          `<line x1="${fmt(symX)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * 16)}" y2="${fmt(cy + dy)}" stroke="${T.ink}" stroke-width="1"/>`
+          `<line x1="${fmt(solidEnd)}" y1="${fmt(cy)}" x2="${fmt(symX - tailDir * conductorLen)}" y2="${fmt(cy + dy)}" stroke="${T.ink}" stroke-width="1"/>`
         );
       }
       break;
+    }
     case "quick-connect-male": {
       // Flat blade with the crimp barrel behind it
       const bx = symX - (tailDir > 0 ? 20 : 0);
@@ -339,6 +360,21 @@ function renderTerminalSymbol(box: NodeBox, resolved?: ResolvedPart): string {
       );
       break;
   }
+  // Strip length: dimensioned on the exposed conductor so it reads straight
+  // off the drawing (bare/tinned ends are the only styles whose conductor shows)
+  if (stripped) {
+    const x0 = symX;
+    const x1 = symX - tailDir * conductorLen;
+    const dy = cy - 12;
+    const dim = `stroke="${T.ink}" stroke-width="0.75"`;
+    parts.push(
+      `<line x1="${fmt(x0)}" y1="${fmt(dy)}" x2="${fmt(x1)}" y2="${fmt(dy)}" ${dim}/>`,
+      `<line x1="${fmt(x0)}" y1="${fmt(dy - 3)}" x2="${fmt(x0)}" y2="${fmt(cy - 5)}" ${dim}/>`,
+      `<line x1="${fmt(x1)}" y1="${fmt(dy - 3)}" x2="${fmt(x1)}" y2="${fmt(cy - 5)}" ${dim}/>`,
+      haloText((x0 + x1) / 2, dy - 4, `STRIP ${node.stripMm} mm`, { size: 8, weight: "bold", anchor: "middle" })
+    );
+  }
+
   const labelX = box.x + box.width / 2;
   const desc = resolved?.mpn ? `${terminalShortDesc(node)} · ${resolved.mpn}` : terminalShortDesc(node);
   parts.push(text(labelX, box.y + box.height + 6, `${node.id} · ${desc}`, { size: 9, weight: "bold", anchor: "middle" }));
@@ -708,11 +744,7 @@ function renderSegments(layout: LayoutResult): string {
 
     // Bare bundle runs show the wires alone; a band is only drawn for coverings
     if (covered) {
-      let bandFill = T.band;
-      if (segment.covering === "heatshrink") bandFill = T.bandHeatshrink;
-      else if (segment.covering === "pet-braid") bandFill = "url(#petBraid)";
-      else if (segment.covering === "spiral-wrap") bandFill = "url(#spiralWrap)";
-      else if (segment.covering === "split-loom") bandFill = T.bandLoom;
+      const bandFill = coveringFill(segment.covering!);
       parts.push(
         `<g transform="translate(${fmt(from.x)} ${fmt(from.y)}) rotate(${fmt(angle)})">` +
           `<rect x="0" y="${fmt(-bandH / 2)}" width="${fmt(len)}" height="${bandH}" fill="${bandFill}"/>` +
@@ -723,6 +755,99 @@ function renderSegments(layout: LayoutResult): string {
 
   }
   return parts.join("\n");
+}
+
+/** Sub-polyline of `points` starting at index 0 and running `length` along it. */
+function walkPolyline(points: Point[], length: number): Point[] {
+  const out: Point[] = [points[0]];
+  let remaining = length;
+  for (let i = 1; i < points.length && remaining > 0; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    if (seg <= remaining) {
+      out.push(b);
+      remaining -= seg;
+    } else {
+      const t = remaining / seg;
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      remaining = 0;
+    }
+  }
+  return out;
+}
+
+function coveringFill(covering: string): string {
+  if (covering === "heatshrink") return T.bandHeatshrink;
+  if (covering === "pet-braid") return "url(#petBraid)";
+  if (covering === "spiral-wrap") return "url(#spiralWrap)";
+  if (covering === "split-loom") return T.bandLoom;
+  return T.band;
+}
+
+/**
+ * Per-wire end coverings: a short sleeve over one wire's own lead right at its
+ * termination (heatshrink over a solder joint, etc.). Sleeves are drawn beneath
+ * the wires like segment bands; the callouts (one per node, listing the pieces)
+ * are returned separately so they can sit on top of everything.
+ */
+function renderEndCoverings(harness: Harness, layout: LayoutResult): { sleeves: string; labels: string } {
+  const parts: string[] = [];
+  interface Callout {
+    x: number;
+    y: number;
+    dir: number;
+    labels: Set<string>;
+  }
+  const callouts = new Map<string, Callout>();
+
+  for (const wire of harness.wires) {
+    const ends = wire.endCoverings;
+    if (!ends) continue;
+    const path = layout.wirePaths.get(wire.id);
+    if (!path || path.points.length < 2) continue;
+    for (const end of ["from", "to"] as const) {
+      const cover = ends[end];
+      if (!cover) continue;
+      const nodeId = parseEndpoint(wire[end]).nodeId;
+      const gap = layout.leadGaps.get(nodeId) ?? 0;
+      const sleeveLen = gap / 2;
+      if (sleeveLen <= 0) continue;
+      const ordered = end === "from" ? path.points : [...path.points].reverse();
+      const pts = walkPolyline(ordered, sleeveLen);
+      if (pts.length < 2) continue;
+      const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${fmt(p.x)} ${fmt(p.y)}`).join(" ");
+      const dashed = cover.covering === "split-loom" ? ` stroke-dasharray="6 3"` : "";
+      parts.push(
+        `<path d="${d}" fill="none" stroke="${T.bandStroke}" stroke-width="11" stroke-linecap="butt" stroke-linejoin="round"${dashed}/>`,
+        `<path d="${d}" fill="none" stroke="${coveringFill(cover.covering)}" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/>`
+      );
+
+      // One callout per node, above its topmost sleeve, reading away from the node
+      const start = pts[0];
+      const dir = pts[pts.length - 1].x >= start.x ? 1 : -1;
+      const label = `${COVERING_LABELS[cover.covering] ?? cover.covering.toUpperCase()} ${cover.lengthMm} mm`;
+      const existing = callouts.get(nodeId);
+      if (!existing) {
+        callouts.set(nodeId, { x: start.x + dir * 2, y: start.y, dir, labels: new Set([label]) });
+      } else {
+        existing.y = Math.min(existing.y, start.y);
+        existing.labels.add(label);
+      }
+    }
+  }
+
+  const labels: string[] = [];
+  for (const c of callouts.values()) {
+    labels.push(
+      haloText(c.x, c.y - 10, [...c.labels].join(" / "), {
+        size: 7.5,
+        anchor: c.dir > 0 ? "start" : "end",
+        fill: T.textDim,
+      })
+    );
+  }
+  return { sleeves: parts.join("\n"), labels: labels.join("\n") };
 }
 
 /** Segment callouts, drawn above the wires and offset perpendicular to the run. */
@@ -1175,7 +1300,7 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
     { title: "GAUGE", width: 56, align: "middle" },
     { title: "COLOR", width: 74, align: "middle" },
     { title: "LEN (MM)", width: 58, align: "middle" },
-    { title: "NOTES", width: 128 },
+    { title: "NOTES", width: 190 },
   ];
   const wlW = wlCols.reduce((s, c) => s + c.width, 0);
   const wlH = tableHeight(wireList.length, "WIRE LIST");
@@ -1258,12 +1383,15 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
 
   const groupRuns = computeGroupRuns(harness, layout);
   parts.push(`<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(scale)})">`);
+  const endCoverings = renderEndCoverings(harness, layout);
   parts.push(renderSegments(layout));
+  parts.push(endCoverings.sleeves);
   parts.push(renderCableSheaths(harness, layout, groupRuns));
   parts.push(renderWires(harness, layout, groupRuns));
   parts.push(renderSegmentLabels(layout));
   parts.push(renderGroupLabels(groupRuns));
   for (const box of layout.boxes.values()) parts.push(renderNode(box, layout, partsCache));
+  parts.push(endCoverings.labels);
   parts.push(`</g>`);
 
   parts.push(

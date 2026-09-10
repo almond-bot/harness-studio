@@ -1,4 +1,4 @@
-import type { Harness, PartRef, PartsCache, TerminalNode } from "./types.js";
+import type { Harness, PartRef, PartsCache, TerminalNode, Wire } from "./types.js";
 import { parseEndpoint, partKey } from "./types.js";
 import { parseWireColor } from "./colors.js";
 import { resolveRoute } from "./layout.js";
@@ -72,6 +72,13 @@ export function buildWireList(harness: Harness): WireListRow[] {
     }
   });
 
+  const nodeById = new Map(harness.nodes.map((n) => [n.id, n]));
+  const stripNotes = (wire: Wire): string[] =>
+    (["from", "to"] as const).flatMap((end) => {
+      const node = nodeById.get(parseEndpoint(wire[end]).nodeId);
+      return node?.kind === "terminal" && node.stripMm ? [`STRIP ${node.stripMm} MM AT ${node.id}`] : [];
+    });
+
   return harness.wires.map((wire) => ({
     wire: wire.label ?? wire.id,
     from: wire.from,
@@ -82,6 +89,8 @@ export function buildWireList(harness: Harness): WireListRow[] {
     notes: [
       ...(isJumper(wire) ? ["JUMPER"] : []),
       ...(groupNotes.get(wire.id) ?? []),
+      ...endCoveringNotes(wire),
+      ...stripNotes(wire),
       ...(wire.notes ? [wire.notes] : []),
     ].join("; "),
   }));
@@ -93,6 +102,27 @@ const COVERING_NAMES: Record<string, string> = {
   "split-loom": "SPLIT LOOM",
   "spiral-wrap": "SPIRAL WRAP",
 };
+
+const COVERING_SHORT_NAMES: Record<string, string> = {
+  heatshrink: "HEATSHRINK",
+  "pet-braid": "PET BRAID",
+  "split-loom": "SPLIT LOOM",
+  "spiral-wrap": "SPIRAL WRAP",
+};
+
+/** Wire-list notes for per-wire end coverings, e.g. "HEATSHRINK 10 MM AT P1, P2". */
+function endCoveringNotes(wire: Wire): string[] {
+  const byPiece = new Map<string, string[]>();
+  for (const end of ["from", "to"] as const) {
+    const cover = wire.endCoverings?.[end];
+    if (!cover) continue;
+    const name = COVERING_SHORT_NAMES[cover.covering] ?? cover.covering.toUpperCase();
+    const piece = `${name} ${cover.lengthMm} MM`;
+    if (!byPiece.has(piece)) byPiece.set(piece, []);
+    byPiece.get(piece)!.push(parseEndpoint(wire[end]).nodeId);
+  }
+  return [...byPiece].map(([piece, nodes]) => `${piece} AT ${nodes.join(", ")}`);
+}
 
 /** Every sourced part referenced by the harness, in stable order. */
 export function collectPartRefs(harness: Harness): PartRef[] {
@@ -218,11 +248,18 @@ export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
     });
   }
 
-  // Coverings grouped by type, quantity = total covered length
+  // Coverings grouped by type, quantity = total covered length (bundle
+  // coverings on segments plus per-wire pieces at wire ends)
   const coverTotals = new Map<string, number>();
   for (const seg of harness.segments) {
     if (seg.covering && seg.covering !== "none") {
       coverTotals.set(seg.covering, (coverTotals.get(seg.covering) ?? 0) + seg.lengthMm);
+    }
+  }
+  for (const wire of harness.wires) {
+    for (const end of ["from", "to"] as const) {
+      const cover = wire.endCoverings?.[end];
+      if (cover) coverTotals.set(cover.covering, (coverTotals.get(cover.covering) ?? 0) + cover.lengthMm);
     }
   }
   for (const [covering, lengthMm] of coverTotals) {
