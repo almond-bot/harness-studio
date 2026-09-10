@@ -64,10 +64,22 @@ async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   return res.json();
 }
 
-/** Download a product photo and embed it as a data URI (skipped if oversized). */
+/**
+ * Product image CDNs (notably www.mouser.com) sit behind bot protection that
+ * never answers requests carrying a non-browser User-Agent, so image downloads
+ * identify as a browser and are bounded by a timeout.
+ */
+const IMAGE_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
+const IMAGE_TIMEOUT_MS = 15_000;
+
+/** Download a product photo and embed it as a data URI (skipped if oversized, unreachable, or slow). */
 async function fetchImageDataUri(url: string): Promise<string | undefined> {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    const res = await fetch(url, {
+      headers: { "User-Agent": IMAGE_USER_AGENT, Accept: "image/*" },
+      signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
+    });
     if (!res.ok) return undefined;
     const type = res.headers.get("content-type") ?? "image/jpeg";
     if (!type.startsWith("image/")) return undefined;
