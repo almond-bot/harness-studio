@@ -1195,7 +1195,7 @@ function renderTitleBlock(x: number, y: number, w: number, h: number, harness: H
   parts.push(gridLine(x, y + row1, x + w, y + row1));
   parts.push(gridLine(x, y + row1 + row2, x + w, y + row1 + row2));
   parts.push(gridLine(x + c1, y + row1, x + c1, y + h));
-  parts.push(gridLine(x + c1 + c2, y + row1, x + c1 + c2, y + row1 + row2));
+  parts.push(gridLine(x + c1 + c2, y + row1, x + c1 + c2, y + h));
   parts.push(gridLine(x + c1 + c2 + c3, y + row1, x + c1 + c2 + c3, y + h));
   parts.push(
     `<rect x="${fmt(x)}" y="${fmt(y)}" width="${w}" height="${h}" fill="none" stroke="${T.ink}" stroke-width="${BORDER_W}"/>`
@@ -1213,6 +1213,7 @@ function renderTitleBlock(x: number, y: number, w: number, h: number, harness: H
   field(x + c1 + c2 + c3, y + row1, row2, "SCALE", "NTS");
   field(x, y + row1 + row2, row2, "COMPANY", meta.company ?? "—");
   field(x + c1, y + row1 + row2, row2, "DRAWN BY", meta.drawnBy ?? "—");
+  field(x + c1 + c2, y + row1 + row2, row2, "QTY", meta.quantity != null ? String(meta.quantity) : "—");
   field(x + c1 + c2 + c3, y + row1 + row2, row2, "SHEET", sheet);
   return parts.join("\n");
 }

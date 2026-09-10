@@ -18,6 +18,7 @@
         "date": { "type": "string" },
         "company": { "type": "string" },
         "drawnBy": { "type": "string" },
+        "quantity": { "type": "integer", "minimum": 1 },
         "sheet": { "enum": ["ANSI B", "Letter", "A4", "A3"] }
       }
     },

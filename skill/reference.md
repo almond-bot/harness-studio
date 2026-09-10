@@ -35,6 +35,7 @@ Components are always real, orderable parts. Everywhere a `part` appears it is:
 |---|---|
 | `title` | Required. Uppercase looks best in the title block |
 | `partNumber`, `rev`, `date`, `company`, `drawnBy` | Optional title block fields |
+| `quantity` | Optional build quantity (integer ≥ 1), shown as QTY in the title block |
 | `sheet` | `"ANSI B"` (default, 17x11), `"Letter"`, `"A3"`, `"A4"` |
 
 ## nodes

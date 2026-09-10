@@ -45,6 +45,7 @@ export interface HarnessMeta {
   date?: string;
   company?: string;
   drawnBy?: string;
+  quantity?: number;
   sheet?: SheetSize;
 }
 
