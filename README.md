@@ -52,7 +52,7 @@ Components are always real, orderable parts referenced by distributor part numbe
 }
 ```
 
-Supported today: multi-branch harnesses, twisted pairs and shielded multicore cables (`wireGroups`), ring/spade/ferrule/quick-connect/tinned/bare/solder-cup/pin terminations, splices, inline diodes and resistors (flyback diodes, pull resistors), jumper (loopback) wires, connector crimp contacts and hardware (locks/boots/backshells), connector assembly details (`face`: real pin pattern with wire colors and bend direction), heatshrink / PET braid / split loom / spiral wrap coverings, striped wire colors, per-node layout overrides, and CSV wiring-table/BOM export (`tables`).
+Supported today: multi-branch harnesses, twisted pairs and shielded multicore cables (`wireGroups`), ring/spade/ferrule/quick-connect/tinned/bare/solder-cup/pin terminations (with dimensioned strip length via `stripMm`), splices, inline diodes and resistors (flyback diodes, pull resistors), jumper (loopback) wires, connector crimp contacts and hardware (locks/boots/backshells), connector assembly details (`face`: real pin pattern with wire colors and bend direction), heatshrink / PET braid / split loom / spiral wrap coverings (on bundle segments or as individual pieces at a wire's ends via `endCoverings`), striped wire colors, per-node layout overrides, and CSV wiring-table/BOM export (`tables`).
 
 ### Part sourcing
 

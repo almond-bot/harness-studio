@@ -101,7 +101,8 @@
                   ]
                 },
                 "stud": { "type": "string" },
-                "part": { "$ref": "#/definitions/part" }
+                "part": { "$ref": "#/definitions/part" },
+                "stripMm": { "type": "number", "exclusiveMinimum": 0 }
               }
             }
           },
@@ -170,6 +171,16 @@
           "color": { "type": "string" },
           "label": { "type": "string" },
           "route": { "type": "array", "items": { "$ref": "#/definitions/id" } },
+          "endCoverings": {
+            "type": "object",
+            "description": "Per-wire covering pieces at the wire's terminations (e.g. heatshrink over a solder joint)",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "from": { "$ref": "#/definitions/endCovering" },
+              "to": { "$ref": "#/definitions/endCovering" }
+            }
+          },
           "notes": { "type": "string" }
         }
       }
@@ -253,6 +264,15 @@
     "endpoint": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_+-]+)?$"
+    },
+    "endCovering": {
+      "type": "object",
+      "required": ["covering", "lengthMm"],
+      "additionalProperties": false,
+      "properties": {
+        "covering": { "enum": ["heatshrink", "pet-braid", "split-loom", "spiral-wrap"] },
+        "lengthMm": { "type": "number", "exclusiveMinimum": 0 }
+      }
     },
     "position": {
       "type": "object",

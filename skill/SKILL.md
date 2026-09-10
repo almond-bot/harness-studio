@@ -91,11 +91,11 @@ Key rules:
 - Every connector requires a `part` (`vendor` + `number`). Real terminals require one too; `tinned`/`bare` are wire preparations and take none. Connectors also take optional `contacts` (crimp contact part, BOM qty = wired cavities) and `hardware` (locks, boots, backshells).
 - Part vendors: `lcsc` (part # like `C30170181`), `mouser` (Mouser # or MPN), `digikey` (Digi-Key # or MPN)
 - Wire endpoints on connectors are `"J1.1"` (node.pin); on terminals/splices/diodes/resistors just `"T1"`
-- Terminal styles: `ring` (set `stud`), `spade`, `ferrule`, `quick-connect-male`, `quick-connect-female`, `tinned`, `bare`, `solder-cup`, `pin`
+- Terminal styles: `ring` (set `stud`), `spade`, `ferrule`, `quick-connect-male`, `quick-connect-female`, `tinned`, `bare`, `solder-cup`, `pin`; `stripMm` dimensions the insulation strip length on the drawing (bare/tinned) and in the wire list
 - Inline `diode`/`resistor` nodes take a `part`, exactly 2 wires, and a segment into the tree; diodes take `cathodeTowards` (node id the band faces)
 - A wire between two pins of the same connector is a jumper (loopback) — zero length, drawn as an arc
 - `wireGroups` with `cable: true` model multicore cables (optional `shield: "foil" | "braid"`, optional sourced cable `part`); with `twisted: true`, twisted pairs
-- Coverings: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none`
+- Coverings: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none` — a segment `covering` sleeves the whole bundle; a wire's `endCoverings` (`{ "from": { "covering": "heatshrink", "lengthMm": 10 } }`) puts an individual piece on that wire alone at its termination (e.g. heatshrink over each solder joint)
 - Wire colors: standard names, stripes as `"red/white"`
 - Sheets: `ANSI B` (default), `Letter`, `A3`, `A4`
 - The BOM and wire list are derived automatically — don't add wire or connector rows to `accessories`

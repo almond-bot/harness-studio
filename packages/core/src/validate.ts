@@ -3,7 +3,7 @@ import schema from "./schema.json" with { type: "json" };
 import type { ConnectorNode, Harness } from "./types.js";
 import { parseEndpoint, partKey } from "./types.js";
 import { checkTree, findSegmentPath } from "./graph.js";
-import { collectPartRefs, formatSource } from "./bom.js";
+import { collectPartRefs, formatSource, wireLengthMm } from "./bom.js";
 
 export interface ValidationIssue {
   path: string;
@@ -156,6 +156,30 @@ export function validateHarness(data: unknown): ValidationResult {
           errors.push({
             path: `/wires/${i}`,
             message: `no segment path exists between the endpoints of wire "${wire.id}"`,
+          });
+        }
+      }
+    });
+  }
+
+  // Per-wire end coverings: only on real (non-jumper) wires, no longer than the wire
+  if (errors.length === 0) {
+    harness.wires.forEach((wire, i) => {
+      if (!wire.endCoverings) return;
+      if (parseEndpoint(wire.from).nodeId === parseEndpoint(wire.to).nodeId) {
+        errors.push({
+          path: `/wires/${i}/endCoverings`,
+          message: `wire "${wire.id}" is a jumper and cannot carry end coverings`,
+        });
+        return;
+      }
+      const lengthMm = wireLengthMm(harness, wire.id);
+      for (const end of ["from", "to"] as const) {
+        const cover = wire.endCoverings[end];
+        if (cover && cover.lengthMm > lengthMm) {
+          errors.push({
+            path: `/wires/${i}/endCoverings/${end}`,
+            message: `wire "${wire.id}" ${end} end covering is ${cover.lengthMm} mm but the wire is only ${lengthMm} mm long`,
           });
         }
       }

@@ -123,14 +123,16 @@
       "from": "J1.1",
       "to": "T1",
       "gauge": "16 AWG",
-      "color": "red"
+      "color": "red",
+      "endCoverings": { "from": { "covering": "heatshrink", "lengthMm": 10 } }
     },
     {
       "id": "W2",
       "from": "J1.2",
       "to": "T2",
       "gauge": "16 AWG",
-      "color": "black"
+      "color": "black",
+      "endCoverings": { "from": { "covering": "heatshrink", "lengthMm": 10 } }
     },
     {
       "id": "W3",
@@ -170,7 +172,8 @@
   "notes": [
     "CRIMP TERMINATIONS PER IPC/WHMA-A-620.",
     "BRANCH LENGTHS MEASURED FROM BREAKOUT CENTER.",
-    "TWIST SDA/SCL PAIR AT 25 MM LAY."
+    "TWIST SDA/SCL PAIR AT 25 MM LAY.",
+    "POWER PINS J1.1 AND J1.2 SOLDERED; 10 MM HEATSHRINK OVER EACH SOLDER JOINT INDIVIDUALLY."
   ],
   "parts": {
     "lcsc:C30170181": {

@@ -120,6 +120,11 @@ export interface TerminalNode {
    * solder-cup); omitted only for wire preparations (tinned/bare ends).
    */
   part?: PartRef;
+  /**
+   * Insulation strip length at this termination. Drawn as a dimension on the
+   * exposed conductor for bare/tinned ends and noted in the wire list for all.
+   */
+  stripMm?: number;
   position?: Position;
 }
 
@@ -163,6 +168,18 @@ export interface Segment {
   covering?: Covering;
 }
 
+/**
+ * A short piece of covering applied to one wire alone at one of its ends —
+ * e.g. 10 mm of heatshrink over a solder joint at a connector pin. Unlike a
+ * segment covering (which sleeves the whole bundle), this belongs to the wire,
+ * so several wires leaving the same connector each get their own piece.
+ */
+export interface WireEndCovering {
+  covering: Exclude<Covering, "none">;
+  /** Length of the piece along the wire, from the termination */
+  lengthMm: number;
+}
+
 export interface Wire {
   id: string;
   /**
@@ -178,6 +195,11 @@ export interface Wire {
   label?: string;
   /** Segment ids the wire runs through; auto-derived when omitted */
   route?: string[];
+  /** Per-wire covering pieces at the `from` and/or `to` termination */
+  endCoverings?: {
+    from?: WireEndCovering;
+    to?: WireEndCovering;
+  };
   notes?: string;
 }
 

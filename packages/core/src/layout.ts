@@ -39,6 +39,12 @@ export interface LayoutResult {
   boxes: Map<string, NodeBox>;
   segmentLines: Map<string, SegmentLine>;
   wirePaths: Map<string, WirePath>;
+  /**
+   * Node id -> clear zone between the node edge and the start of its bundles.
+   * Each wire runs a straight stub of half this length out of its termination;
+   * per-wire end coverings are drawn over that stub.
+   */
+  leadGaps: Map<string, number>;
   bounds: { x: number; y: number; width: number; height: number };
 }
 
@@ -49,6 +55,8 @@ const H_GAP = 210;
 const V_GAP = 44;
 /** Clear fan-out zone between a connector edge and the start of the bundle */
 const FANOUT = 26;
+/** Longer fan-out where wires carry their own end coverings, so each sleeve is legible */
+const FANOUT_SLEEVED = 72;
 
 function nodeSize(node: HarnessNode): { width: number; height: number } {
   switch (node.kind) {
@@ -81,9 +89,24 @@ export function resolveRoute(harness: Harness, wireId: string): string[] {
   );
 }
 
+/** Nodes where at least one wire termination carries its own end covering. */
+export function nodesWithEndCoverings(harness: Harness): Set<string> {
+  const ids = new Set<string>();
+  for (const wire of harness.wires) {
+    if (wire.endCoverings?.from) ids.add(parseEndpoint(wire.from).nodeId);
+    if (wire.endCoverings?.to) ids.add(parseEndpoint(wire.to).nodeId);
+  }
+  return ids;
+}
+
 export function layoutHarness(harness: Harness): LayoutResult {
   const rootId = pickRoot(harness);
   const nodeById = new Map(harness.nodes.map((n) => [n.id, n]));
+  const sleeved = nodesWithEndCoverings(harness);
+  const leadGaps = new Map<string, number>();
+  for (const node of harness.nodes) {
+    leadGaps.set(node.id, sleeved.has(node.id) ? FANOUT_SLEEVED : node.kind === "connector" ? FANOUT : 0);
+  }
 
   // Build tree structure (children ordered by segment declaration order)
   const children = new Map<string, string[]>();
@@ -194,9 +217,10 @@ export function layoutHarness(harness: Harness): LayoutResult {
     });
     const idx = sorted.indexOf(seg);
     const y = box.y + (box.height * (idx + 1)) / (sorted.length + 1);
-    // Bundles start a short distance off connectors so each wire visibly
-    // fans out from its own pin row before joining the bundle
-    const gap = box.node.kind === "connector" ? FANOUT : 0;
+    // Bundles start a short distance off connectors (and off any node whose
+    // wires carry end coverings) so each wire visibly fans out from its own
+    // termination before joining the bundle
+    const gap = leadGaps.get(nodeId) ?? 0;
     return { x: rightSide ? box.x + box.width + gap : box.x - gap, y };
   };
 
@@ -227,22 +251,29 @@ export function layoutHarness(harness: Harness): LayoutResult {
     const endpointAnchor = (ref: string, otherRef: string): Point[] => {
       const { nodeId, pinId } = parseEndpoint(ref);
       const box = boxes.get(nodeId)!;
+      const gap = leadGaps.get(nodeId) ?? 0;
       if (pinId && box.pinAnchors.has(pinId)) {
         // Straight horizontal exit from the pin row keeps the pin-to-wire
         // mapping readable before the wire bends toward the bundle
         const anchor = box.pinAnchors.get(pinId)!;
-        const stubX = box.facesRight ? anchor.x + FANOUT / 2 : anchor.x - FANOUT / 2;
+        const stubX = box.facesRight ? anchor.x + gap / 2 : anchor.x - gap / 2;
         return [anchor, { x: stubX, y: anchor.y }];
       }
+      let anchor: Point;
+      let rightSide: boolean;
       if (box.node.kind === "diode" || box.node.kind === "resistor") {
         // Two-lead device: each wire attaches on the side facing its far end
         const other = boxes.get(parseEndpoint(otherRef).nodeId);
-        const rightSide = other
-          ? other.x + other.width / 2 >= box.x + box.width / 2
-          : !box.facesRight;
-        return [{ x: rightSide ? box.x + box.width : box.x, y: box.y + box.height / 2 }];
+        rightSide = other ? other.x + other.width / 2 >= box.x + box.width / 2 : !box.facesRight;
+        anchor = { x: rightSide ? box.x + box.width : box.x, y: box.y + box.height / 2 };
+      } else {
+        rightSide = box.facesRight;
+        anchor = { x: rightSide ? box.x + box.width : box.x, y: box.y + box.height / 2 };
       }
-      return [{ x: box.facesRight ? box.x + box.width : box.x, y: box.y + box.height / 2 }];
+      // Pinless nodes only get a straight stub when something (an end
+      // covering) needs to be drawn on it
+      if (gap > 0) return [anchor, { x: rightSide ? anchor.x + gap / 2 : anchor.x - gap / 2, y: anchor.y }];
+      return [anchor];
     };
 
     const lead = endpointAnchor(wire.from, wire.to);
@@ -287,6 +318,7 @@ export function layoutHarness(harness: Harness): LayoutResult {
     boxes,
     segmentLines,
     wirePaths,
+    leadGaps,
     bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
   };
 }
