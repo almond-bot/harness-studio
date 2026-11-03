@@ -20,7 +20,10 @@ export interface WireListRow {
   to: string;
   gauge: string;
   color: string;
+  /** Routed length: sum of the segments the wire runs through (0 for jumpers) */
   lengthMm: number;
+  /** Length to cut: `cutLengthMm` when set, otherwise the routed length */
+  cutLengthMm: number;
   notes: string;
 }
 
@@ -55,6 +58,14 @@ function isJumper(wire: { from: string; to: string }): boolean {
   return parseEndpoint(wire.from).nodeId === parseEndpoint(wire.to).nodeId;
 }
 
+/** Length of wire to cut: the explicit `cutLengthMm`, else the routed length (0 for jumpers). */
+export function wireCutLengthMm(harness: Harness, wireId: string): number {
+  const wire = harness.wires.find((w) => w.id === wireId);
+  if (wire?.cutLengthMm !== undefined) return wire.cutLengthMm;
+  if (!wire || isJumper(wire)) return 0;
+  return wireLengthMm(harness, wireId);
+}
+
 export function buildWireList(harness: Harness): WireListRow[] {
   const groupNotes = new Map<string, string[]>();
   const note = (wireId: string, text: string) => {
@@ -86,6 +97,7 @@ export function buildWireList(harness: Harness): WireListRow[] {
     gauge: wire.gauge ?? "—",
     color: parseWireColor(wire.color).code,
     lengthMm: isJumper(wire) ? 0 : wireLengthMm(harness, wire.id),
+    cutLengthMm: wireCutLengthMm(harness, wire.id),
     notes: [
       ...(isJumper(wire) ? ["JUMPER"] : []),
       ...(groupNotes.get(wire.id) ?? []),
@@ -208,13 +220,13 @@ export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
     rows.push({ qty: String(qty), mpn, description, manufacturer, source: formatSource(ref) });
   }
 
-  // Sourced multicore cables: one row per cable group, length = longest core.
+  // Sourced multicore cables: one row per cable group, length = longest core cut.
   // Their core wires are excluded from the bulk wire totals below.
   const cableCoreWires = new Set<string>();
   (harness.wireGroups ?? []).forEach((group, i) => {
     if (!group.cable) return;
     for (const w of group.wires) cableCoreWires.add(w);
-    const lengthMm = Math.max(...group.wires.map((w) => wireLengthMm(harness, w)), 0);
+    const lengthMm = Math.max(...group.wires.map((w) => wireCutLengthMm(harness, w)), 0);
     const label = group.label ?? group.id ?? `CB${i + 1}`;
     const shield = group.shield && group.shield !== "none" ? `, ${group.shield.toUpperCase()} SHIELD` : "";
     const fallback = `CABLE ${label}, ${group.wires.length} CORE${shield}`;
@@ -226,7 +238,7 @@ export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
     }
   });
 
-  // Wire grouped by gauge + color, quantity = total length
+  // Wire grouped by gauge + color, quantity = total cut length
   const wireTotals = new Map<string, { lengthMm: number; gauge: string; color: string }>();
   for (const wire of harness.wires) {
     if (cableCoreWires.has(wire.id)) continue;
@@ -234,11 +246,11 @@ export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
     const color = parseWireColor(wire.color).code;
     const key = `${gauge}|${color}`;
     const total = wireTotals.get(key) ?? { lengthMm: 0, gauge, color };
-    total.lengthMm += wireLengthMm(harness, wire.id);
+    total.lengthMm += wireCutLengthMm(harness, wire.id);
     wireTotals.set(key, total);
   }
   for (const total of wireTotals.values()) {
-    if (total.lengthMm <= 0) continue; // jumpers consume no measured wire
+    if (total.lengthMm <= 0) continue; // jumpers without a cut length consume no measured wire
     rows.push({
       qty: `${total.lengthMm} mm`,
       mpn: "—",

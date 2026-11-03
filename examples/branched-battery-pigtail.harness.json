@@ -139,14 +139,16 @@
       "from": "J1.S1",
       "to": "J2.1",
       "gauge": "26 AWG",
-      "color": "white"
+      "color": "white",
+      "cutLengthMm": 240
     },
     {
       "id": "W4",
       "from": "J1.S2",
       "to": "J2.2",
       "gauge": "26 AWG",
-      "color": "blue"
+      "color": "blue",
+      "cutLengthMm": 240
     }
   ],
   "wireGroups": [
@@ -172,7 +174,7 @@
   "notes": [
     "CRIMP TERMINATIONS PER IPC/WHMA-A-620.",
     "BRANCH LENGTHS MEASURED FROM BREAKOUT CENTER.",
-    "TWIST SDA/SCL PAIR AT 25 MM LAY.",
+    "TWIST SDA/SCL PAIR AT 25 MM LAY. SDA/SCL CUT 10 MM LONG FOR TWIST TAKE-UP.",
     "POWER PINS J1.1 AND J1.2 SOLDERED; 10 MM HEATSHRINK OVER EACH SOLDER JOINT INDIVIDUALLY."
   ],
   "parts": {

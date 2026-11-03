@@ -146,7 +146,7 @@ program
 
     const wiring = buildWireList(harness);
     const wiringCsv = csv([
-      ["Wire", "From", "To", "Gauge", "Color", "Length (mm)", "Twisted With", "Notes"],
+      ["Wire", "From", "To", "Gauge", "Color", "Length (mm)", "Cut Length (mm)", "Twisted With", "Notes"],
       ...wiring.map((row, i) => [
         row.wire,
         row.from,
@@ -154,6 +154,7 @@ program
         row.gauge,
         row.color,
         String(row.lengthMm),
+        String(row.cutLengthMm),
         (twistedWith.get(harness.wires[i].id) ?? []).join(" "),
         row.notes,
       ]),

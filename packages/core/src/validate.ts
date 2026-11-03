@@ -186,6 +186,21 @@ export function validateHarness(data: unknown): ValidationResult {
     });
   }
 
+  // Cut length can add slack (twist take-up, service loop) but never be shorter than the route
+  if (errors.length === 0) {
+    harness.wires.forEach((wire, i) => {
+      if (wire.cutLengthMm === undefined) return;
+      if (parseEndpoint(wire.from).nodeId === parseEndpoint(wire.to).nodeId) return;
+      const lengthMm = wireLengthMm(harness, wire.id);
+      if (wire.cutLengthMm < lengthMm) {
+        errors.push({
+          path: `/wires/${i}/cutLengthMm`,
+          message: `wire "${wire.id}" cut length is ${wire.cutLengthMm} mm but its route is ${lengthMm} mm long`,
+        });
+      }
+    });
+  }
+
   const wireById = new Map(harness.wires.map((w) => [w.id, w]));
   (harness.wireGroups ?? []).forEach((group, i) => {
     for (const wireId of group.wires) {

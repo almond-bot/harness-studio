@@ -172,6 +172,11 @@
           "color": { "type": "string" },
           "label": { "type": "string" },
           "route": { "type": "array", "items": { "$ref": "#/definitions/id" } },
+          "cutLengthMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Cut length when it differs from the routed length (e.g. twist take-up, service loop); at least the routed length. Used for the BOM wire quantity."
+          },
           "endCoverings": {
             "type": "object",
             "description": "Per-wire covering pieces at the wire's terminations (e.g. heatshrink over a solder joint)",

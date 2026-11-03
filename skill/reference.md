@@ -109,6 +109,7 @@ Each segment is one physical bundle run: `{ "id": "SEG1", "from": "J1", "to": "B
 - `gauge` and `color` are optional but warn when missing; always set them for manufacturing drawings
 - `color`: `black, brown, red, orange, yellow, green, blue, violet, gray, white, pink, tan`; stripe with `"base/stripe"`, e.g. `"white/blue"`
 - **Jumper (loopback)**: a wire between two pins of the same connector, e.g. `"from": "J2.2", "to": "J2.3"`. Renders as an arc at the connector face, counts as zero length, and is flagged `JUMPER` in the wire list.
+- **Cut length**: `"cutLengthMm": 300` sets the length to cut when it differs from the routed length, e.g. extra on a twisted pair for twist take-up (twisting shortens the pair; cut CAN/signal pairs longer than the untwisted power wires they run beside) or a service loop. Must be at least the routed length. The drawing geometry still follows the segments; the wire list shows a `CUT (MM)` column next to `LEN (MM)`, and the BOM wire quantity uses the cut length. Use this rather than writing `CUT LENGTH … MM` into `notes`. Allowed on jumpers, which otherwise count as zero length.
 - **Per-wire end coverings**: `"endCoverings": { "from": { "covering": "heatshrink", "lengthMm": 10 }, "to": { … } }` puts a short piece of covering on this wire alone at its `from`/`to` termination — e.g. heatshrink over a solder joint at a connector pin, applied individually per wire. Use this instead of a covered segment whenever wires that share a bundle need their own pieces (a segment `covering` sleeves the whole bundle). Rendered as a sleeve on the wire's lead right at the node with a `HEATSHRINK 10 mm` callout, added to the covering totals in the BOM, and noted in the wire list (`HEATSHRINK 10 MM AT J1`). Not allowed on jumpers.
 
 ## wireGroups
@@ -124,7 +125,7 @@ Twisted groups render a twist symbol on the shared segment and add `TWISTED (TW1
 Cable groups (`cable: true`) treat the member wires as cores of one multicore cable:
 
 - A sheath outline is drawn along every segment all cores share; `shield: "foil" | "braid"` adds a shield outline and callout
-- The BOM lists the cable (length = longest core) instead of the individual core wires; `part` sources it (optional — cable stock, like wire, may stay generic)
+- The BOM lists the cable (length = longest core cut length) instead of the individual core wires; `part` sources it (optional — cable stock, like wire, may stay generic)
 - State shield termination in `notes` (e.g. "DO NOT TERMINATE SHIELD AT J2 END")
 
 ## accessories
@@ -133,8 +134,8 @@ Extra sourced BOM rows: `{ "part": { "vendor": "lcsc", "number": "C2837172" }, "
 
 ## Derived outputs (do not author)
 
-- **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color, covering totals by type (segment coverings plus per-wire end coverings), then accessories
-- **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), twist and end-covering notes
+- **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color (summing each wire's cut length), covering totals by type (segment coverings plus per-wire end coverings), then accessories
+- **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), cut length (a `CUT (MM)` column, shown when any wire sets `cutLengthMm`), twist and end-covering notes
 - **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left
 - **`parts`**: distributor data embedded by `parts fetch`; product photos render on the drawing
 

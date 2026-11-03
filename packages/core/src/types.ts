@@ -196,6 +196,13 @@ export interface Wire {
   label?: string;
   /** Segment ids the wire runs through; auto-derived when omitted */
   route?: string[];
+  /**
+   * Cut length when it differs from the routed length — e.g. extra length on
+   * a twisted pair for twist take-up, or a service loop. Must be at least the
+   * routed length. Shown in the wire list CUT column and used for the BOM
+   * wire quantity; the drawing geometry still follows the segments.
+   */
+  cutLengthMm?: number;
   /** Per-wire covering pieces at the `from` and/or `to` termination */
   endCoverings?: {
     from?: WireEndCovering;

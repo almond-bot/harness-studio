@@ -1293,7 +1293,11 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
   const tbY = frame.y + frame.h - tbH;
   parts.push(renderTitleBlock(tbX, tbY, tbW, tbH, harness, sheet));
 
-  // Wire list: bottom-left
+  // Wire list: bottom-left. A CUT column appears only when some wire's cut
+  // length differs from its routed length; it takes its width from NOTES so
+  // the table footprint (and the notes block beside it) stays put.
+  const showCut = harness.wires.some((w) => w.cutLengthMm !== undefined);
+  const cutW = 52;
   const wlCols: Column[] = [
     { title: "WIRE", width: 44, align: "middle" },
     { title: "FROM", width: 70 },
@@ -1301,7 +1305,8 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
     { title: "GAUGE", width: 56, align: "middle" },
     { title: "COLOR", width: 74, align: "middle" },
     { title: "LEN (MM)", width: 58, align: "middle" },
-    { title: "NOTES", width: 190 },
+    ...(showCut ? [{ title: "CUT (MM)", width: cutW, align: "middle" as const }] : []),
+    { title: "NOTES", width: showCut ? 190 - cutW : 190 },
   ];
   const wlW = wlCols.reduce((s, c) => s + c.width, 0);
   const wlH = tableHeight(wireList.length, "WIRE LIST");
@@ -1312,7 +1317,16 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
       wlX,
       wlY,
       wlCols,
-      wireList.map((r) => [r.wire, r.from, r.to, r.gauge, r.color, String(r.lengthMm), r.notes]),
+      wireList.map((r) => [
+        r.wire,
+        r.from,
+        r.to,
+        r.gauge,
+        r.color,
+        String(r.lengthMm),
+        ...(showCut ? [String(r.cutLengthMm)] : []),
+        r.notes,
+      ]),
       "WIRE LIST"
     )
   );
