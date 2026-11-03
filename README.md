@@ -34,7 +34,7 @@ Or install globally with `npm install -g almond-harness-studio`.
 
 ## The format in 30 seconds
 
-A harness is a tree of **nodes** (connectors, terminals, splices, breakouts) joined by **segments** (bundle runs with a length and optional covering). **Wires** run pin-to-pin through segments; routing, wire lengths, the BOM, and the wire list are all derived.
+A harness is a tree of **nodes** (connectors, terminals, splices, breakouts) joined by **segments** (bundle runs with a length and optional covering), or several separate trees when it ships as loose runs (power to one plug, a signal pair to its own). **Wires** run pin-to-pin through segments; routing, wire lengths, the BOM, and the wire list are all derived.
 
 Components are always real, orderable parts referenced by distributor part number — LCSC (`lcsc`), Mouser (`mouser`), or Digi-Key (`digikey`). Wire and bulk coverings are the only generic materials.
 

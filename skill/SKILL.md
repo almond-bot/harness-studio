@@ -61,7 +61,7 @@ Validation errors include the JSON path and an actionable message. Unresolved pa
 
 ## Data model
 
-A harness is a tree: **nodes** (connectors, terminals, splices, breakout points, inline diodes/resistors) joined by **segments** (bundle runs with a length and optional covering). **Wires** run from pin to pin through segments; routes are derived automatically.
+A harness is a tree (or a few separate trees, for runs that travel loose): **nodes** (connectors, terminals, splices, breakout points, inline diodes/resistors) joined by **segments** (bundle runs with a length and optional covering). **Wires** run from pin to pin through segments; routes are derived automatically.
 
 ```json
 {

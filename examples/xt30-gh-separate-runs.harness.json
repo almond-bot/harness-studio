@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "title": "XT30 + JST GH 400 MM JUMPER (SEPARATE RUNS)",
+    "partNumber": "EX-SEPARATE-RUNS",
+    "rev": "A",
+    "date": "2026-11-03",
+    "company": "ALMOND",
+    "quantity": 1,
+    "sheet": "ANSI B"
+  },
+  "nodes": [
+    {
+      "id": "P1",
+      "kind": "connector",
+      "part": {
+        "vendor": "lcsc",
+        "number": "C99102"
+      },
+      "pins": [
+        {
+          "id": "PIN+",
+          "label": "PIN+"
+        },
+        {
+          "id": "PIN-",
+          "label": "PIN-"
+        }
+      ],
+      "face": {
+        "view": "wire-side",
+        "note": "PWR/GND SOLDERED INLINE (STRAIGHT)",
+        "pins": [
+          {
+            "pin": "PIN+",
+            "x": 0,
+            "y": 0,
+            "size": 1.7
+          },
+          {
+            "pin": "PIN-",
+            "x": 5,
+            "y": 0,
+            "size": 1.7
+          }
+        ]
+      }
+    },
+    {
+      "id": "J1",
+      "kind": "connector",
+      "part": {
+        "vendor": "digikey",
+        "number": "455-1592-ND"
+      },
+      "contacts": {
+        "vendor": "mouser",
+        "number": "306-SSHL-002T-P0.2"
+      },
+      "pins": [
+        {
+          "id": "1",
+          "label": "SIG1"
+        },
+        {
+          "id": "2",
+          "label": "SIG2"
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "kind": "connector",
+      "part": {
+        "vendor": "lcsc",
+        "number": "C99102"
+      },
+      "pins": [
+        {
+          "id": "PIN+",
+          "label": "PIN+"
+        },
+        {
+          "id": "PIN-",
+          "label": "PIN-"
+        }
+      ],
+      "face": {
+        "view": "wire-side",
+        "note": "PWR/GND SOLDERED INLINE (STRAIGHT)",
+        "pins": [
+          {
+            "pin": "PIN+",
+            "x": 0,
+            "y": 0,
+            "size": 1.7
+          },
+          {
+            "pin": "PIN-",
+            "x": 5,
+            "y": 0,
+            "size": 1.7
+          }
+        ]
+      }
+    },
+    {
+      "id": "J2",
+      "kind": "connector",
+      "part": {
+        "vendor": "digikey",
+        "number": "455-1592-ND"
+      },
+      "contacts": {
+        "vendor": "mouser",
+        "number": "306-SSHL-002T-P0.2"
+      },
+      "pins": [
+        {
+          "id": "1",
+          "label": "SIG1"
+        },
+        {
+          "id": "2",
+          "label": "SIG2"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "id": "SEG1",
+      "from": "P1",
+      "to": "P2",
+      "lengthMm": 400
+    },
+    {
+      "id": "SEG2",
+      "from": "J1",
+      "to": "J2",
+      "lengthMm": 400
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "from": "P1.PIN+",
+      "to": "P2.PIN+",
+      "gauge": "16 AWG",
+      "color": "red",
+      "endCoverings": {
+        "from": {
+          "covering": "heatshrink",
+          "lengthMm": 10
+        },
+        "to": {
+          "covering": "heatshrink",
+          "lengthMm": 10
+        }
+      },
+      "notes": "UL3135, 252/0.08 MM TC, CUT LENGTH 410 MM"
+    },
+    {
+      "id": "W2",
+      "from": "P1.PIN-",
+      "to": "P2.PIN-",
+      "gauge": "16 AWG",
+      "color": "black",
+      "endCoverings": {
+        "from": {
+          "covering": "heatshrink",
+          "lengthMm": 10
+        },
+        "to": {
+          "covering": "heatshrink",
+          "lengthMm": 10
+        }
+      },
+      "notes": "UL3135, 252/0.08 MM TC, CUT LENGTH 410 MM"
+    },
+    {
+      "id": "W3",
+      "from": "J1.1",
+      "to": "J2.1",
+      "gauge": "30 AWG",
+      "color": "green",
+      "notes": "30 AWG STRANDED TC, FOR JST SSHL-002T-P0.2 CONTACTS, CUT LENGTH 440 MM"
+    },
+    {
+      "id": "W4",
+      "from": "J1.2",
+      "to": "J2.2",
+      "gauge": "30 AWG",
+      "color": "yellow",
+      "notes": "30 AWG STRANDED TC, FOR JST SSHL-002T-P0.2 CONTACTS, CUT LENGTH 440 MM"
+    }
+  ],
+  "wireGroups": [
+    {
+      "id": "TW1",
+      "wires": [
+        "W3",
+        "W4"
+      ],
+      "twisted": true
+    }
+  ],
+  "notes": [
+    "P1 (END A): POWER WIRES SOLDERED DIRECTLY TO THE XT30 POWER PINS, INLINE (STRAIGHT, 0 DEG).",
+    "P2 (END B): POWER WIRES SOLDERED DIRECTLY TO THE XT30 POWER PINS, INLINE (STRAIGHT, 0 DEG).",
+    "J1 (END A SIGNAL): JST GHR-02V-S HOUSING, SIGNAL WIRES CRIMPED TO JST SSHL-002T-P0.2 CONTACTS: SIG1 (GREEN) TO PIN 1, SIG2 (YELLOW) TO PIN 2. PIN 1 IS ON THE LEFT VIEWED FROM THE WIRE SIDE WITH THE LATCH UP. THE SIGNAL PAIR RUNS SEPARATELY FROM THE POWER WIRES, 400 MM TO THE REAR OF J1.",
+    "J2 (END B SIGNAL): JST GHR-02V-S HOUSING, SIGNAL WIRES CRIMPED TO JST SSHL-002T-P0.2 CONTACTS: SIG1 (GREEN) TO PIN 1, SIG2 (YELLOW) TO PIN 2. PIN 1 IS ON THE LEFT VIEWED FROM THE WIRE SIDE WITH THE LATCH UP. THE SIGNAL PAIR RUNS SEPARATELY FROM THE POWER WIRES, 400 MM TO THE REAR OF J2.",
+    "10 MM LENGTH OF \u00d84.0 MM BLACK 2:1 HEAT SHRINK OVER EACH POWER SOLDER JOINT AT P1 AND P2 (4 PIECES, ONE PER POWER WIRE PER END; NOT OVER THE SIGNAL WIRES). SLIDE ON BEFORE SOLDERING.",
+    "TWIST SIGNAL PAIR: T=33 TWISTS OVER RUN (APPROX 12 MM LAY).",
+    "POWER WIRE: UL3135 SILICONE RUBBER INSULATED, 600V, 200C, 16 AWG 252/0.08 MM TINNED COPPER. SIGNAL WIRE: 30 AWG STRANDED TINNED COPPER, CRIMPED TO JST SSHL-002T-P0.2 CONTACTS.",
+    "WIRE COLORS: PIN+ RED, PIN- BLACK, SIG1 GREEN, SIG2 YELLOW.",
+    "WIRE LENGTH 400+/-15 MM, MEASURED ALONG THE WIRE BETWEEN THE REAR FACES OF THE END A AND END B CONNECTORS (CONNECTOR BODIES NOT INCLUDED). WIRE CUT LENGTHS: POWER 410 MM, SIGNAL 440 MM.",
+    "100% CONTINUITY TEST: NO OPENS, SHORTS, OR MISWIRES. CONDUCTION RESISTANCE <= 3 OHM; INSULATION RESISTANCE >= 10 MOHM."
+  ]
+}
