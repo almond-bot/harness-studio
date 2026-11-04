@@ -1,6 +1,6 @@
 import type { Harness, HarnessNode, Segment } from "./types.js";
 import { parseEndpoint } from "./types.js";
-import { findSegmentPath } from "./graph.js";
+import { connectedRuns, findSegmentPath } from "./graph.js";
 
 export interface Point {
   x: number;
@@ -53,6 +53,8 @@ export const CONNECTOR_HEADER = 34;
 export const PIN_ROW = 18;
 const H_GAP = 210;
 const V_GAP = 44;
+/** Extra space between separate runs stacked one above the other */
+const RUN_GAP = 40;
 /** Clear fan-out zone between a connector edge and the start of the bundle */
 const FANOUT = 26;
 /** Longer fan-out where wires carry their own end coverings, so each sleeve is legible */
@@ -108,42 +110,56 @@ export function layoutHarness(harness: Harness): LayoutResult {
     leadGaps.set(node.id, sleeved.has(node.id) ? FANOUT_SLEEVED : node.kind === "connector" ? FANOUT : 0);
   }
 
+  // A harness is usually one tree; one sold as separate runs (power to one
+  // plug, a signal pair to its own) is several. Each run is laid out as its
+  // own tree from its own root, the runs stacked top to bottom: the run with
+  // the harness's root first, then the rest in node order.
+  const runs = connectedRuns(harness);
+  runs.sort((a, b) => Number(b.includes(rootId)) - Number(a.includes(rootId)));
+  const runRoots = runs.map((run) => {
+    if (run.includes(rootId)) return rootId;
+    return run.find((id) => nodeById.get(id)!.kind === "connector") ?? run[0];
+  });
+
   // Build tree structure (children ordered by segment declaration order)
   const children = new Map<string, string[]>();
   const parent = new Map<string, string>();
-  const visited = new Set<string>([rootId]);
-  const queue = [rootId];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    children.set(current, children.get(current) ?? []);
-    for (const seg of harness.segments) {
-      let other: string | null = null;
-      if (seg.from === current && !visited.has(seg.to)) other = seg.to;
-      else if (seg.to === current && !visited.has(seg.from)) other = seg.from;
-      if (other) {
-        visited.add(other);
-        parent.set(other, current);
-        children.get(current)!.push(other);
-        queue.push(other);
+  for (const runRoot of runRoots) {
+    const visited = new Set<string>([runRoot]);
+    const queue = [runRoot];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      children.set(current, children.get(current) ?? []);
+      for (const seg of harness.segments) {
+        let other: string | null = null;
+        if (seg.from === current && !visited.has(seg.to)) other = seg.to;
+        else if (seg.to === current && !visited.has(seg.from)) other = seg.from;
+        if (other) {
+          visited.add(other);
+          parent.set(other, current);
+          children.get(current)!.push(other);
+          queue.push(other);
+        }
       }
     }
   }
 
-  // When the root is a single-ended leaf (a plain cable end), other leaf ends
-  // hanging off the same hub belong at the root's end of the drawing, not a
-  // column deeper. Pull them back into the root's column so both ends of a
-  // cable fan symmetrically — but only while the hub continues onward; a hub
-  // whose children are all leaves is a genuine rightward breakout.
-  const rootKids = children.get(rootId) ?? [];
-  let leftLeaves: string[] = [];
-  let leftHub: string | null = null;
-  if (rootKids.length === 1) {
+  // When a run's root is a single-ended leaf (a plain cable end), other leaf
+  // ends hanging off the same hub belong at the root's end of the drawing,
+  // not a column deeper. Pull them back into the root's column so both ends
+  // of a cable fan symmetrically — but only while the hub continues onward; a
+  // hub whose children are all leaves is a genuine rightward breakout.
+  const leftLeaves = new Set<string>();
+  const leftHubs = new Map<string, { hub: string; leaves: string[] }>();
+  for (const runRoot of runRoots) {
+    const rootKids = children.get(runRoot) ?? [];
+    if (rootKids.length !== 1) continue;
     const hub = rootKids[0];
     const hubKids = children.get(hub) ?? [];
     const leaves = hubKids.filter((c) => (children.get(c) ?? []).length === 0);
     if (leaves.length > 0 && leaves.length < hubKids.length) {
-      leftLeaves = leaves;
-      leftHub = hub;
+      for (const leaf of leaves) leftLeaves.add(leaf);
+      leftHubs.set(runRoot, { hub, leaves });
       children.set(
         hub,
         hubKids.filter((c) => !leaves.includes(c))
@@ -151,13 +167,13 @@ export function layoutHarness(harness: Harness): LayoutResult {
     }
   }
 
-  // Depth per node, max width per depth column
+  // Depth per node, max width per depth column (shared by every run)
   const depth = new Map<string, number>();
   const assignDepth = (id: string, d: number) => {
     depth.set(id, d);
     for (const child of children.get(id) ?? []) assignDepth(child, d + 1);
   };
-  assignDepth(rootId, 0);
+  for (const runRoot of runRoots) assignDepth(runRoot, 0);
   for (const id of leftLeaves) depth.set(id, 0);
 
   const maxDepth = Math.max(...[...depth.values()], 0);
@@ -190,26 +206,32 @@ export function layoutHarness(harness: Harness): LayoutResult {
     centerY.set(id, center);
     return center;
   };
-  place(rootId);
+  runRoots.forEach((runRoot, i) => {
+    if (i > 0) cursor += RUN_GAP;
+    place(runRoot);
 
-  if (leftHub) {
-    // Stack the root and the pulled-back leaves at the left end, centered on
-    // the hub, in the hub's segment declaration order
-    const order: string[] = [];
-    for (const seg of harness.segments) {
-      const other = seg.from === leftHub ? seg.to : seg.to === leftHub ? seg.from : null;
-      if (other && (other === rootId || leftLeaves.includes(other)) && !order.includes(other)) {
-        order.push(other);
+    const left = leftHubs.get(runRoot);
+    if (left) {
+      // Stack the root and the pulled-back leaves at the left end, centered on
+      // the hub, in the hub's segment declaration order
+      const order: string[] = [];
+      for (const seg of harness.segments) {
+        const other = seg.from === left.hub ? seg.to : seg.to === left.hub ? seg.from : null;
+        if (other && (other === runRoot || left.leaves.includes(other)) && !order.includes(other)) {
+          order.push(other);
+        }
       }
+      const heights = order.map((id) => nodeSize(nodeById.get(id)!).height);
+      const total = heights.reduce((a, b) => a + b, 0) + V_GAP * (order.length - 1);
+      let yTop = (centerY.get(left.hub) ?? 0) - total / 2;
+      order.forEach((id, j) => {
+        centerY.set(id, yTop + heights[j] / 2);
+        yTop += heights[j] + V_GAP;
+      });
+      // A pulled-back column taller than the run's leaves mustn't reach into the next run
+      cursor = Math.max(cursor, yTop + V_GAP);
     }
-    const heights = order.map((id) => nodeSize(nodeById.get(id)!).height);
-    const total = heights.reduce((a, b) => a + b, 0) + V_GAP * (order.length - 1);
-    let yTop = (centerY.get(leftHub) ?? 0) - total / 2;
-    order.forEach((id, i) => {
-      centerY.set(id, yTop + heights[i] / 2);
-      yTop += heights[i] + V_GAP;
-    });
-  }
+  });
 
   const boxes = new Map<string, NodeBox>();
   for (const node of harness.nodes) {
@@ -219,7 +241,7 @@ export function layoutHarness(harness: Harness): LayoutResult {
     const autoY = (centerY.get(node.id) ?? 0) - height / 2;
     const x = node.position?.x ?? autoX;
     const y = node.position?.y ?? autoY;
-    const facesRight = node.id === rootId || leftLeaves.includes(node.id);
+    const facesRight = runRoots.includes(node.id) || leftLeaves.has(node.id);
 
     const pinAnchors = new Map<string, Point>();
     if (node.kind === "connector") {

@@ -96,7 +96,7 @@ Inline two-lead component spliced into the harness (flyback diodes, pull resisto
 
 Each segment is one physical bundle run: `{ "id": "SEG1", "from": "J1", "to": "B1", "lengthMm": 100, "covering": "pet-braid" }`.
 
-- The segment graph must be a connected tree (no cycles, no islands)
+- The segment graph must be a tree (no cycles, every node on a segment). A harness made of separate runs that never meet (an XT30 power pair to its plugs, a JST GH signal pair to its own) may be several trees; each run is drawn as its own row, stacked top to bottom
 - `lengthMm`: run length; wire lengths and covering quantities are derived from it
 - `covering`: `heatshrink`, `pet-braid`, `split-loom`, `spiral-wrap`, `none` — sleeves the whole bundle on this run. For a piece over one wire only (heatshrink on a single solder joint), use the wire's `endCoverings` instead.
 
@@ -136,7 +136,7 @@ Extra sourced BOM rows: `{ "part": { "vendor": "lcsc", "number": "C2837172" }, "
 
 - **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color (summing each wire's cut length), covering totals by type (segment coverings plus per-wire end coverings), then accessories
 - **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), cut length (a `CUT (MM)` column, shown when any wire sets `cutLengthMm`), twist and end-covering notes
-- **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left
+- **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left. Separate runs stack below the root's run, each from its first connector
 - **`parts`**: distributor data embedded by `parts fetch`; product photos render on the drawing
 
 ## CLI
