@@ -851,9 +851,37 @@ function renderEndCoverings(harness: Harness, layout: LayoutResult): { sleeves: 
 }
 
 /** Segment callouts, drawn above the wires and offset perpendicular to the run. */
-function renderSegmentLabels(layout: LayoutResult): string {
+function renderSegmentLabels(layout: LayoutResult, groupRuns: GroupRun[]): string {
   const parts: string[] = [];
+  // Parallel segments drawn as one twisted tail share a single callout on the tail
+  const tails = new Map<string, TwistTail>();
+  for (const run of groupRuns) for (const [segId, tail] of run.tails) tails.set(segId, tail);
+  const labeledTails = new Set<TwistTail>();
   for (const line of layout.segmentLines.values()) {
+    const tail = tails.get(line.segment.id);
+    if (tail) {
+      if (labeledTails.has(tail)) continue;
+      labeledTails.add(tail);
+      const segs = tail.segIds.map((id) => layout.segmentLines.get(id)!.segment);
+      const lengths = new Set(segs.map((s) => s.lengthMm));
+      const label =
+        lengths.size === 1
+          ? `${segs.map((s) => s.id).join(" / ")} · ${segs[0].lengthMm} mm`
+          : segs.map((s) => `${s.id} · ${s.lengthMm} mm`).join(" / ");
+      const dx = tail.fan.x - tail.start.x;
+      const dy = tail.fan.y - tail.start.y;
+      const len = Math.hypot(dx, dy) || 1;
+      let px = -dy / len;
+      let py = dx / len;
+      if (py < 0) {
+        px = -px;
+        py = -py;
+      }
+      const mx = (tail.start.x + tail.fan.x) / 2;
+      const my = (tail.start.y + tail.fan.y) / 2;
+      parts.push(haloText(mx + px * 26, my + py * 26 + 3, label, { size: 8.5, anchor: "middle", fill: T.textMuted }));
+      continue;
+    }
     const { from, to, segment } = line;
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -976,6 +1004,81 @@ interface GroupRun {
   pure: Set<string>;
   /** wire id -> strand index within the group */
   strand: Map<string, number>;
+  /**
+   * segment id -> twisted tail. Where the group's wires leave a connector or
+   * terminal on separate segments (one wire each, no breakout), the pair is
+   * drawn twisted along their mean line and fans out just short of the ends.
+   */
+  tails: Map<string, TwistTail>;
+}
+
+interface TwistTail {
+  /** Weave start: mean of the segments' attachment points at the common node */
+  start: Point;
+  /** Weave end, where the strands fan out to their own terminations */
+  fan: Point;
+  /** The parallel segments drawn as this one twisted run */
+  segIds: string[];
+}
+
+/** Fan-out allowance at the split end of a twisted tail */
+const TAIL_FAN = 36;
+
+function dist(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function meanPoint(points: Point[]): Point {
+  return {
+    x: points.reduce((s, p) => s + p.x, 0) / points.length,
+    y: points.reduce((s, p) => s + p.y, 0) / points.length,
+  };
+}
+
+/**
+ * Twisted tails of a group: at a connector/terminal every member wire ends
+ * on, the members' adjacent route segments when each is the member's own
+ * (distinct, carrying no other wire). A breakout or splice is an explicit
+ * split point, so segments leaving one stay untwisted.
+ */
+function computeTwistTails(
+  harness: Harness,
+  layout: LayoutResult,
+  wireIds: string[],
+  shared: string[]
+): Map<string, TwistTail> {
+  const tails = new Map<string, TwistTail>();
+  const wires = wireIds.map((id) => harness.wires.find((w) => w.id === id));
+  if (wires.some((w) => !w)) return tails;
+  const members = new Set(wireIds);
+  const ends = (w: (typeof wires)[number]) => [parseEndpoint(w!.from).nodeId, parseEndpoint(w!.to).nodeId];
+  const candidates = new Set(ends(wires[0]).filter((n) => wires.every((w) => ends(w).includes(n))));
+  for (const nodeId of candidates) {
+    const kind = layout.boxes.get(nodeId)?.node.kind;
+    if (kind !== "connector" && kind !== "terminal") continue;
+    const segIds = wires.map((w) => {
+      const route = layout.wirePaths.get(w!.id)?.routeSegments ?? [];
+      return parseEndpoint(w!.from).nodeId === nodeId ? route[0] : route[route.length - 1];
+    });
+    if (segIds.some((s) => s === undefined || shared.includes(s))) continue;
+    if (new Set(segIds).size !== segIds.length) continue;
+    const lines = segIds.map((s) => layout.segmentLines.get(s!));
+    if (lines.some((l) => !l || l.wires.length !== 1 || !members.has(l.wires[0]))) continue;
+    const near = lines.map((l) => (l!.segment.from === nodeId ? l!.from : l!.to));
+    const far = lines.map((l) => (l!.segment.from === nodeId ? l!.to : l!.from));
+    const start = meanPoint(near);
+    const farMean = meanPoint(far);
+    const len = dist(start, farMean);
+    if (len < 1) continue;
+    const back = Math.min(TAIL_FAN, len * 0.3);
+    const fan = {
+      x: farMean.x - ((farMean.x - start.x) / len) * back,
+      y: farMean.y - ((farMean.y - start.y) / len) * back,
+    };
+    const tail: TwistTail = { start, fan, segIds: segIds as string[] };
+    for (const s of tail.segIds) tails.set(s, tail);
+  }
+  return tails;
 }
 
 /**
@@ -990,7 +1093,8 @@ function computeGroupRuns(harness: Harness, layout: LayoutResult): GroupRun[] {
     const shared = paths[0]!.routeSegments.filter((segId) =>
       paths.every((p) => p!.routeSegments.includes(segId))
     );
-    if (shared.length === 0) return;
+    const tails = group.twisted ? computeTwistTails(harness, layout, group.wires, shared) : new Map<string, TwistTail>();
+    if (shared.length === 0 && tails.size === 0) return;
     const axes = new Map<string, { start: Point; end: Point }>();
     for (const segId of shared) {
       const ends = paths.map((p) => {
@@ -1031,6 +1135,7 @@ function computeGroupRuns(harness: Harness, layout: LayoutResult): GroupRun[] {
       axes,
       pure,
       strand,
+      tails,
     });
   });
   return runs;
@@ -1070,6 +1175,26 @@ function renderWires(harness: Harness, layout: LayoutResult, groupRuns: GroupRun
       path.routeSegments.forEach((segId, i) => {
         let entry = path.points[path.leadIn + 2 * i];
         let exit = path.points[path.leadIn + 1 + 2 * i];
+        const phase = (run?.strand.get(wire.id) ?? 0) % 2;
+        const tail = run?.tails.get(segId);
+        if (tail) {
+          // Twisted from the common termination to the fan point, then this
+          // strand runs straight to its own end
+          if (dist(entry, tail.start) <= dist(exit, tail.start)) {
+            if (tail.start.x !== cur.x || tail.start.y !== cur.y) {
+              pieces.push({ kind: "line", from: cur, to: tail.start, phase: 0 });
+            }
+            pieces.push({ kind: "wave", from: tail.start, to: tail.fan, phase });
+            pieces.push({ kind: "line", from: tail.fan, to: exit, phase: 0 });
+            cur = exit;
+          } else {
+            if (entry.x !== cur.x || entry.y !== cur.y) pieces.push({ kind: "line", from: cur, to: entry, phase: 0 });
+            pieces.push({ kind: "line", from: entry, to: tail.fan, phase: 0 });
+            pieces.push({ kind: "wave", from: tail.fan, to: tail.start, phase });
+            cur = tail.start;
+          }
+          return;
+        }
         const axis = run?.axes.get(segId);
         if (axis) {
           // Weave around the group centerline instead of the parallel offset
@@ -1150,7 +1275,11 @@ function renderCableSheaths(harness: Harness, layout: LayoutResult, groupRuns: G
 function renderGroupLabels(groupRuns: GroupRun[]): string {
   const parts: string[] = [];
   for (const run of groupRuns) {
-    const axes = [...run.axes.values()];
+    const axes = [
+      ...run.axes.values(),
+      ...[...new Set(run.tails.values())].map((t) => ({ start: t.start, end: t.fan })),
+    ];
+    if (axes.length === 0) continue;
     // Longest shared run hosts the label
     const best = axes.reduce((a, b) =>
       Math.hypot(a.end.x - a.start.x, a.end.y - a.start.y) >= Math.hypot(b.end.x - b.start.x, b.end.y - b.start.y)
@@ -1403,7 +1532,7 @@ export function renderHarnessSvg(harness: Harness, options: RenderOptions = {}):
   parts.push(endCoverings.sleeves);
   parts.push(renderCableSheaths(harness, layout, groupRuns));
   parts.push(renderWires(harness, layout, groupRuns));
-  parts.push(renderSegmentLabels(layout));
+  parts.push(renderSegmentLabels(layout, groupRuns));
   parts.push(renderGroupLabels(groupRuns));
   for (const box of layout.boxes.values()) parts.push(renderNode(box, layout, partsCache));
   parts.push(endCoverings.labels);
