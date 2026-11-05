@@ -116,9 +116,21 @@ export function layoutHarness(harness: Harness): LayoutResult {
   // the harness's root first, then the rest in node order.
   const runs = connectedRuns(harness);
   runs.sort((a, b) => Number(b.includes(rootId)) - Number(a.includes(rootId)));
+  // Every other run is oriented like the root's run: rooted at a node of the
+  // same kind (and terminal style) as the root, so a lead drawn bare-end-left
+  // keeps all its runs bare-end-left. Failing that, the first connector.
+  const rootNode = nodeById.get(rootId);
+  const likeRoot = (node: HarnessNode): boolean =>
+    rootNode !== undefined &&
+    node.kind === rootNode.kind &&
+    (node.kind !== "terminal" || rootNode.kind !== "terminal" || node.style === rootNode.style);
   const runRoots = runs.map((run) => {
     if (run.includes(rootId)) return rootId;
-    return run.find((id) => nodeById.get(id)!.kind === "connector") ?? run[0];
+    return (
+      run.find((id) => likeRoot(nodeById.get(id)!)) ??
+      run.find((id) => nodeById.get(id)!.kind === "connector") ??
+      run[0]
+    );
   });
 
   // Build tree structure (children ordered by segment declaration order)

@@ -118,7 +118,7 @@ Twisted pairs and multicore cables.
 
 `{ "id": "TW1", "wires": ["W3", "W4"], "twisted": true, "label": "TW1" }`
 
-Twisted groups render a twist symbol on the shared segment and add `TWISTED (TW1)` to the wire list rows.
+Twisted groups render a twist symbol on the shared segment and add `TWISTED (TW1)` to the wire list rows. A pair needs no breakout to show as twisted to its ends: when its wires leave a connector or terminal on separate segments (one wire each, e.g. `P1→T3` and `P1→T4`), they are drawn twisted along that full run and fan out just short of their own terminations, under one callout (`SEG3 / SEG4 · 125 mm`). Segments leaving a breakout or splice stay untwisted — a breakout is an explicit split point.
 
 `{ "id": "CB1", "wires": ["W7", "W8"], "cable": true, "twisted": true, "shield": "foil", "part": { "vendor": "lcsc", "number": "C…" } }`
 
@@ -136,7 +136,7 @@ Extra sourced BOM rows: `{ "part": { "vendor": "lcsc", "number": "C2837172" }, "
 
 - **BOM**: sourced parts grouped by vendor part number (with SOURCE column), wire totals by gauge+color (summing each wire's cut length), covering totals by type (segment coverings plus per-wire end coverings), then accessories
 - **Wire list**: one row per wire with from/to, gauge, color code, computed length (sum of routed segment lengths), cut length (a `CUT (MM)` column, shown when any wire sets `cutLengthMm`), twist and end-covering notes
-- **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left. Separate runs stack below the root's run, each from its first connector
+- **Layout**: tree drawn left-to-right from the root; use `layout.root` to change which connector is on the left. Separate runs stack below the root's run, each oriented like it: rooted at a node of the same kind (and terminal style) as the root, else its first connector — so `"root": "T1"` on a bare end draws every run bare-end-left
 - **`parts`**: distributor data embedded by `parts fetch`; product photos render on the drawing
 
 ## CLI
