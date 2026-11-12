@@ -3,7 +3,7 @@ import schema from "./schema.json" with { type: "json" };
 import type { ConnectorNode, Harness } from "./types.js";
 import { parseEndpoint, partKey } from "./types.js";
 import { checkTree, findSegmentPath } from "./graph.js";
-import { collectPartRefs, formatSource, wireLengthMm } from "./bom.js";
+import { collectPartRefs, formatSource, roundMm, wireLengthMm } from "./bom.js";
 
 export interface ValidationIssue {
   path: string;
@@ -176,7 +176,7 @@ export function validateHarness(data: unknown): ValidationResult {
       const lengthMm = wireLengthMm(harness, wire.id);
       for (const end of ["from", "to"] as const) {
         const cover = wire.endCoverings[end];
-        if (cover && cover.lengthMm > lengthMm) {
+        if (cover && roundMm(cover.lengthMm) > lengthMm) {
           errors.push({
             path: `/wires/${i}/endCoverings/${end}`,
             message: `wire "${wire.id}" ${end} end covering is ${cover.lengthMm} mm but the wire is only ${lengthMm} mm long`,
@@ -192,7 +192,7 @@ export function validateHarness(data: unknown): ValidationResult {
       if (wire.cutLengthMm === undefined) return;
       if (parseEndpoint(wire.from).nodeId === parseEndpoint(wire.to).nodeId) return;
       const lengthMm = wireLengthMm(harness, wire.id);
-      if (wire.cutLengthMm < lengthMm) {
+      if (roundMm(wire.cutLengthMm) < lengthMm) {
         errors.push({
           path: `/wires/${i}/cutLengthMm`,
           message: `wire "${wire.id}" cut length is ${wire.cutLengthMm} mm but its route is ${lengthMm} mm long`,
