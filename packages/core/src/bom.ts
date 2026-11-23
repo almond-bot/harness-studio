@@ -49,9 +49,21 @@ const TERMINAL_STYLE_NAMES: Record<TerminalNode["style"], string> = {
   pin: "PIN TERMINAL",
 };
 
+/**
+ * Summed lengths pick up binary floating-point noise (38.1 + 76.2 is
+ * 114.30000000000001), which would otherwise reach the wire list and BOM and
+ * fail the cut-length check. Rounding to a nanometre removes the noise while
+ * keeping fractional-inch lengths such as 1/64" (0.396875 mm) exact.
+ */
+export function roundMm(mm: number): number {
+  return Math.round(mm * 1e6) / 1e6;
+}
+
 export function wireLengthMm(harness: Harness, wireId: string): number {
   const segById = new Map(harness.segments.map((s) => [s.id, s]));
-  return resolveRoute(harness, wireId).reduce((sum, id) => sum + (segById.get(id)?.lengthMm ?? 0), 0);
+  return roundMm(
+    resolveRoute(harness, wireId).reduce((sum, id) => sum + (segById.get(id)?.lengthMm ?? 0), 0)
+  );
 }
 
 function isJumper(wire: { from: string; to: string }): boolean {
@@ -252,7 +264,7 @@ export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
   for (const total of wireTotals.values()) {
     if (total.lengthMm <= 0) continue; // jumpers without a cut length consume no measured wire
     rows.push({
-      qty: `${total.lengthMm} mm`,
+      qty: `${roundMm(total.lengthMm)} mm`,
       mpn: "—",
       description: `WIRE, ${total.gauge}, ${total.color}`.toUpperCase(),
       manufacturer: "",
@@ -276,7 +288,7 @@ export function buildBom(harness: Harness, parts: PartsCache = {}): BomRow[] {
   }
   for (const [covering, lengthMm] of coverTotals) {
     rows.push({
-      qty: `${lengthMm} mm`,
+      qty: `${roundMm(lengthMm)} mm`,
       mpn: "—",
       description: COVERING_NAMES[covering] ?? covering.toUpperCase(),
       manufacturer: "",
